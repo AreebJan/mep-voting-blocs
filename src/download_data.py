@@ -12,7 +12,7 @@ FILES = ["members", "group_memberships", "groups", "votes", "member_votes",
 
 
 for name in FILES:
-    #takes the compressed file
+    # uses a compressed version of the file for a faster download
     file = RAW / f"{name}.csv.gz"
     if file.exists():
         print(f"{name} already downloaded")
@@ -21,3 +21,4 @@ for name in FILES:
         urllib.request.urlretrieve(URL + f"{name}.csv.gz", file)
 
 print("finished")
+
