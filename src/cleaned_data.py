@@ -2,20 +2,21 @@ import pandas as pd
 from paths import RAW, PROC
 
 # loading data
-members = pd.read_csv(RAW / "members.csv", usecols=["id", "first_name", "last_name", "country_code"])
-gm      = pd.read_csv(RAW / "group_memberships.csv", parse_dates=["start_date", "end_date"])
-groups  = pd.read_csv(RAW / "groups.csv")
-votes   = pd.read_csv(RAW / "votes.csv",
+members = pd.read_csv(RAW / "members.csv.gz", usecols=["id", "first_name", "last_name", "country_code"])
+gm      = pd.read_csv(RAW / "group_memberships.csv.gz", parse_dates=["start_date", "end_date"])
+groups  = pd.read_csv(RAW / "groups.csv.gz")
+votes   = pd.read_csv(RAW / "votes.csv.gz",
                       usecols=["id", "timestamp", "is_main", "procedure_type",
                                "count_for", "count_against", "result"],
                       parse_dates=["timestamp"])
 
-# convert member votes to parquet, then loading the data 
+# convert the member votes to a parquet file and then loading the data 
 mv_path = PROC / "member_votes.parquet"
+
 # Only reads the csv once, and after that it will load much faster using parquet
-# add dytpe to keep the memory usage a lot smaller
+# add dtype to keep the memory usage a lot smaller
 if not mv_path.exists():
-    mv = pd.read_csv(RAW / "member_votes.csv",
+    mv = pd.read_csv(RAW / "member_votes.csv.gz",
                      usecols=["vote_id", "member_id", "position", "country_code",
                               "group_code", "national_party_id"],
                      dtype={"vote_id": "int32", "member_id": "int32",
