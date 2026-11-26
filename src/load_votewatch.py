@@ -11,7 +11,9 @@ Then:   from load_votewatch import load_ep8; d8 = load_ep8()
 
 Differences from HowTheyVote to keep in mind:
 - each MEP has ONE group and ONE national party for the whole term (HowTheyVote has
-  them per vote), so group switchers are labelled with a single group
+  them per vote): the group at the END of the term. Run src/fetch_ep_groups.py first to
+  get the real group history from the EP API; this script then uses the group the MEP
+  was in on the day of each vote
 - MEPs who left early have no group in the file; we fill it in from their national party
 - vote codes: 1 for, 2 against, 3 abstention, 4 absent, 5 didn't vote, 0 not an MEP.
   Code 6 is not in the legend; it is treated like 4/5 (did not vote). Only FOR and
@@ -94,9 +96,49 @@ def clean_meps(meps):
     return meps
 
 
+def fix_dates(dates):
+    """The Date column has day and month swapped whenever the day is 12 or less (e.g.
+    10 March 2015 is stored as 2015-10-03). Swapping them back puts every vote on a
+    Monday-Thursday plenary day, none in August, in vote-id order."""
+    d = pd.to_datetime(dates)
+    swap = (d.dt.day <= 12) & (d.dt.day != d.dt.month)
+    fixed = pd.to_datetime(dict(year=d.dt.year,
+                                month=d.dt.day.where(swap, d.dt.month),
+                                day=d.dt.month.where(swap, d.dt.day)))
+    return fixed
+
+
+def groups_on_vote_day(mv, votes, history):
+    """Replaces the one-group-per-MEP label by the group the MEP was in on the day of
+    each vote, from the EP API history (fetch_ep_groups.py). Keeps the VoteWatch group
+    where the history has no period covering that day."""
+    day = mv.vote_id.map(votes.set_index("vote_id").timestamp)
+    left = pd.DataFrame({"row": np.arange(len(mv)),
+                         "member_id": mv.member_id.to_numpy().astype("int64"),
+                         "day": day.to_numpy().astype("datetime64[ns]")}).sort_values("day")
+    right = history.rename(columns={"start": "day"}).astype(
+        {"member_id": "int64", "day": "datetime64[ns]", "end": "datetime64[ns]"}).sort_values("day")
+    hit = pd.merge_asof(left, right[["member_id", "day", "end", "group_code"]],
+                        on="day", by="member_id", direction="backward")
+    hit = hit[hit.group_code.notna() & (hit.day <= hit.end)].set_index("row").group_code
+    new = mv.group_code.astype("string").to_numpy()
+    changed = (new[hit.index] != hit.to_numpy()).sum()
+    new[hit.index] = hit.to_numpy()
+    print(f"EP API history: group set for {len(hit) / len(mv):.1%} of MEP-votes, "
+          f"{changed:,} MEP-votes moved to the group the MEP was really in that day")
+    return pd.Categorical(new)
+
+
 def build():
     meps, codes, vote_ids = read_rcvs()
     meps = clean_meps(meps)
+    history_file = SRC / "ep8_group_history.csv"
+    history = None
+    if history_file.exists():
+        history = pd.read_csv(history_file, parse_dates=["start", "end"])
+        # MEPs without a VoteWatch group can still be placed using the history
+        first = history.sort_values("start").groupby("member_id").group_code.first()
+        meps["group_code"] = meps.group_code.fillna(meps.member_id.map(first))
     no_group = meps.group_code.isna()
     print(f"{len(meps)} MEPs, {len(vote_ids)} votes; "
           f"{no_group.sum()} MEPs without a group are dropped")
@@ -108,7 +150,7 @@ def build():
     final = [c for c in docs.columns if c.startswith("Final")][0]
     votes = pd.DataFrame({
         "vote_id": docs["Vote ID"].astype("int32"),
-        "timestamp": pd.to_datetime(docs["Date"]),
+        "timestamp": fix_dates(docs["Date"]),
         "is_main": docs[final].eq(1),
         "count_for": docs["Yeas"], "count_against": docs["No"], "count_abstention": docs["Abs"],
         "passed": docs["Vote"].eq("+"),
@@ -130,6 +172,9 @@ def build():
         "group_code": pd.Categorical(meps.group_code.to_numpy()[r]),
         "party": pd.Categorical(meps.party.to_numpy()[r]),
     })
+
+    if history is not None:
+        mv["group_code"] = groups_on_vote_day(mv, votes, history)
 
     # Sanity check: FOR counts rebuilt from the MEP data vs the official counts
     rebuilt = mv[mv.position == "FOR"].groupby("vote_id").size()
