@@ -1,4 +1,6 @@
-"""RQ3: using only votes cast BEFORE a switch, did MEPs who later changed group already
+"""Group switchers: a rank-based AUC test with a cluster bootstrap (used for RQ3).
+
+Using only votes cast BEFORE a switch, did MEPs who later changed group already
 vote differently from the colleagues who stayed?
 
 Data caveat: about half of the rows in group_memberships that look like switches are an

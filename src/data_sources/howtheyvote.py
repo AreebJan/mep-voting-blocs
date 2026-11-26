@@ -1,16 +1,36 @@
-"""Turns the raw HowTheyVote CSVs into three tidy parquet files in data/processed/.
+"""HowTheyVote.eu (terms 9 and 10, July 2019 onwards).
 
-Run once from the repo root:   python src/cleaned_data.py
-Afterwards, load the data anywhere with:   from cleaned_data import load; d = load()
-
-Outputs
-- votes.parquet          one row per roll-call vote, with term, contested flag, passed flag
-- member_votes.parquet   one row per MEP per vote (18.2M rows, compact dtypes)
-- vote_topics.parquet    vote_id -> top-level OEIL policy area (a vote can have several)
+download(): fetches the pinned release (config.RELEASE) into data/raw/, only missing files.
+build():    turns the raw CSVs into three parquet files in data/processed/:
+            - votes.parquet          one row per roll-call vote, with term, contested flag, passed flag
+            - member_votes.parquet   one row per MEP per vote (18.3M rows, compact dtypes)
+            - vote_topics.parquet    vote_id -> top-level OEIL policy area (a vote can have several)
+load():     the HowTheyVote tables as a dict (builds them first if missing).
+Run from the repo root:   python src/prepare_data.py download build
 """
+import urllib.request
 import pandas as pd
 from paths import RAW, PROC
-from config import TERMS, LOPSIDED, GROUP_ALIASES
+from config import BASE_URL, RELEASE, TERMS, LOPSIDED, GROUP_ALIASES
+
+# Tables we need for the project
+FILES = ["members", "group_memberships", "groups", "votes", "member_votes",
+         "national_parties", "groups_required_for_majority", "countries",
+         "oeil_subjects", "oeil_subject_votes"]
+
+
+def download():
+    print(f"HowTheyVote release {RELEASE}")
+    for name in FILES:
+        # uses a compressed version of the file for a faster download
+        file = RAW / f"{name}.csv.gz"
+        if file.exists():
+            print(f"{name} already downloaded")
+        else:
+            print(f"downloading {name}...")
+            urllib.request.urlretrieve(BASE_URL + f"{name}.csv.gz", file)
+    (RAW / "RELEASE.txt").write_text(RELEASE + "\n")
+    print("finished")
 
 
 def build():
@@ -87,7 +107,3 @@ def load():
                                usecols=["id", "first_name", "last_name", "country_code"])
     d["required"] = pd.read_csv(RAW / "groups_required_for_majority.csv.gz")
     return d
-
-
-if __name__ == "__main__":
-    build()

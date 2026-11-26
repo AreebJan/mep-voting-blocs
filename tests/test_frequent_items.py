@@ -7,7 +7,7 @@ import sys
 import random
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from frequent_items import apriori, pcy, brute_force
+from algorithms.frequent_itemsets import apriori, pcy, brute_force
 
 # Small textbook-style example: 8 baskets of items a-f
 TOY = [set("abc"), set("abd"), set("acd"), set("abcd"), set("be"), set("bce"),

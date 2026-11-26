@@ -54,7 +54,7 @@ def svd_maps(maps, path=None):
 
 
 def resolution_sweep(sweeps, path=None):
-    """sweeps: {term: DataFrame from rq1.resolution_sweep}"""
+    """sweeps: {term: DataFrame from community_detection.resolution_sweep}"""
     fig, axes = plt.subplots(1, len(sweeps), figsize=(3.6 * len(sweeps), 2.8), sharey=True)
     for ax, (term, s) in zip(np.atleast_1d(axes), sweeps.items()):
         ends = {col: s[f"AMI_{col}"].iloc[-1] for col in ["group", "party", "country"]}
@@ -82,7 +82,7 @@ def resolution_sweep(sweeps, path=None):
 
 
 def policy_areas(tables, path=None):
-    """tables: {term: DataFrame from rq1.policy_areas}; dot plot, AMI group vs country."""
+    """tables: {term: DataFrame from community_detection.policy_areas}; dot plot, AMI group vs country."""
     fig, axes = plt.subplots(1, len(tables), figsize=(3.6 * len(tables), 2.8), sharey=True)
     tables = {k: v for k, v in tables.items()}
     all_labels = sorted(set().union(*[set(t.label) for t in tables.values()]))
@@ -110,7 +110,7 @@ def policy_areas(tables, path=None):
 
 
 def splits(tables, path=None):
-    """tables: {term: DataFrame from rq1.splits_follow_nationality}"""
+    """tables: {term: DataFrame from community_detection.splits_follow_nationality}"""
     order = [g for g in ["GUE_NGL", "GREEN_EFA", "SD", "RENEW", "EPP", "ECR", "ID", "PFE", "ESN"]
              if any(g in set(t.group) for t in tables.values())]
     y_of = {g: i for i, g in enumerate(order[::-1])}

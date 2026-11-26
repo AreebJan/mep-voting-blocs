@@ -11,7 +11,7 @@ import networkx as nx
 from sklearn.metrics import (normalized_mutual_info_score as nmi,
                              adjusted_mutual_info_score as ami,
                              adjusted_rand_score as ari)
-from louvain import modularity
+from algorithms.louvain import modularity
 
 
 def compare(truth, pred, n_perm=200, seed=0):

@@ -1,13 +1,16 @@
-"""RQ1: do voting communities follow European political groups, countries or national
-parties, and does that change with the resolution and the policy area?"""
+"""Community detection on the agreement graph (course topic: graph clustering).
+
+Validation of our Louvain against networkx, the main comparison of communities with
+groups / countries / national parties, how groups split, the resolution sweep, policy
+areas and robustness. Used for RQ1."""
 import time
 import numpy as np
 import pandas as pd
 import networkx as nx
-from config import SEEDS, GAMMA, N_PERMUTATIONS, MIN_VOTES_POLICY, K
-from louvain import louvain_from_scratch, modularity
-from evaluation import compare, label_modularity, nx_partition, nmi, ami
-from agreement import build_term_graph
+from config import SEEDS, GAMMA, N_PERMUTATIONS, MIN_VOTES_POLICY
+from algorithms.louvain import louvain_from_scratch, modularity
+from analysis.evaluation import compare, label_modularity, nx_partition, nmi, ami
+from analysis.agreement_graph import build_term_graph, knn_graph
 
 LABELS = ["group", "country", "party"]
 
@@ -60,29 +63,6 @@ def main_table(g, comm, runs=None, n_perm=N_PERMUTATIONS):
     out.attrs["Q_louvain"] = modularity(W, comm)
     out.attrs["n_communities"] = int(comm.max() + 1)
     return out
-
-
-def pair_agreement(agree, lab):
-    """Mean agreement for pairs of MEPs by (same group?, same country?), with the
-    'different group, different country' pairs as the baseline."""
-    i, j = np.triu_indices(len(agree), 1)
-    a = agree[i, j]
-    ok = ~np.isnan(a)
-    g, c, p = lab.group.to_numpy(), lab.country.to_numpy(), lab.party.to_numpy()
-    sg, sc, sp_ = g[i] == g[j], c[i] == c[j], p[i] == p[j]
-    cats = {
-        "same group, same national party": sg & sp_,
-        "same group, same country, different party": sg & sc & ~sp_,
-        "same group, different country": sg & ~sc,
-        "different group, same country": ~sg & sc,
-        "different group, different country (baseline)": ~sg & ~sc,
-    }
-    rows = [dict(pair_type=k, mean_agreement=a[ok & m].mean(), sd=a[ok & m].std(),
-                 pairs=int((ok & m).sum())) for k, m in cats.items()]
-    df = pd.DataFrame(rows)
-    base = df.mean_agreement.iloc[-1]
-    df["minus_baseline"] = df.mean_agreement - base
-    return df
 
 
 def splits_follow_nationality(lab, comm, min_group=20, exclude=("NI",)):
@@ -165,7 +145,6 @@ def policy_areas(d, term, min_votes=MIN_VOTES_POLICY, seeds=SEEDS[:5]):
 def robustness(g, ks=(10, 15, 25), seeds=SEEDS[:5]):
     """Same analysis with a different number of neighbours, and with NI excluded.
     Reuses the term's agreement matrix; only the kNN graph is rebuilt."""
-    from agreement import knn_graph
     rows = []
     lab = g["labels"]
     for k in ks:

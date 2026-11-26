@@ -1,25 +1,60 @@
-"""RQ2: which coalitions pass votes, and did that change after the 2024 election?
+"""Frequent-itemset mining on vote baskets (course topic: frequent itemsets).
 
-Three parts
-1. Frequent itemsets with our A-priori and PCY on two kinds of baskets:
-   - "FOR" baskets: per adopted contested vote, the national parties (or groups) whose
-     majority voted FOR. Dense (~55% of parties in every basket).
-   - "rebel" baskets: per contested vote, the national parties whose majority voted
-     AGAINST the rest of their own European group. Sparse (~6 parties per vote).
-   Comparing A-priori and PCY on both shows when PCY's hashing pays off.
-2. Group-level coalitions in term 9 vs term 10, validated against HowTheyVote's
-   groups_required_for_majority (term 10 only).
-3. The EPP as pivot: when the left and right blocs disagree, which side the EPP takes and
-   which side wins; and how many votes each group could flip on its own.
-"""
-import time
+Two kinds of baskets:
+- "FOR" baskets: per adopted contested vote, the national parties (or groups) whose
+  majority voted FOR. Dense (~55% of parties in every basket).
+- "rebel" baskets: per contested vote, the national parties whose majority voted
+  AGAINST the rest of their own European group. Sparse (~6 parties per vote).
+Comparing A-priori and PCY on both shows when PCY's hashing pays off. Also: lift tables,
+rebel factions, group coalitions in term 9 vs term 10, and a check against HowTheyVote's
+groups_required_for_majority. Used for RQ2."""
 import numpy as np
 import pandas as pd
 from config import POSITIONS, MIN_PARTY_VOTERS
-import frequent_items as fi
+from algorithms import frequent_itemsets as fi
 
-LEFT_BLOC = ["SD", "GREEN_EFA", "GUE_NGL"]
-RIGHT_BLOC = ["ECR", "FAR", "ESN"]           # FAR = ID (term 9) or PfE (term 10)
+
+# --- Baskets ----------------------------------------------------------------------------
+# --- Baskets (ready) -------------------------------------------------------------------
+def build_baskets(d, term, level="party", passed_only=False,
+                  min_voters=MIN_PARTY_VOTERS, vote_ids=None):
+    """Returns (baskets, vote_ids): baskets is a list of frozensets of item names.
+
+    level="party": items are national parties as "COUNTRY:label" (stable across terms)
+    level="group": items are European political groups (NI excluded, not a group)
+    passed_only:   keep only votes that were adopted ("coalitions that pass votes")
+    min_voters:    an item needs at least this many FOR/AGAINST voters on the vote
+    """
+    v = d["votes"]
+    v = v[(v.term == term) & v.contested]
+    if passed_only:
+        v = v[v.passed]
+    if vote_ids is not None:
+        v = v[v.vote_id.isin(vote_ids)]
+    mv = d["member_votes"]
+    mv = mv[mv.vote_id.isin(v.vote_id) & mv.position.isin(POSITIONS)]
+    col = "party" if level == "party" else "group_code"
+    x = pd.DataFrame({"vote_id": mv.vote_id.to_numpy(),
+                      "item": mv[col].astype("string").to_numpy(),
+                      "for_": (mv.position == "FOR").to_numpy()})
+    if level == "group":
+        x = x[x.item != "NI"]
+    else:
+        x = x[~x.item.str.endswith(":none")]          # MEPs without a national party
+    agg = x.groupby(["vote_id", "item"]).for_.agg(["sum", "size"]).reset_index()
+    agg = agg[(agg["size"] >= min_voters) & (agg["sum"] > agg["size"] / 2)]
+    by_vote = agg.groupby("vote_id").item.apply(frozenset)
+    ids = v.vote_id[v.vote_id.isin(by_vote.index)].to_numpy()
+    return [by_vote[i] for i in ids], ids
+
+
+def basket_stats(baskets):
+    sizes = np.array([len(b) for b in baskets])
+    items = set().union(*baskets)
+    return dict(baskets=len(baskets), distinct_items=len(items),
+                mean_basket_size=sizes.mean(),
+                pairs_if_counted_naively=int(sum(s * (s - 1) // 2 for s in sizes)),
+                triples_if_counted_naively=int(sum(s * (s - 1) * (s - 2) // 6 for s in sizes)))
 
 
 # --- Baskets ----------------------------------------------------------------------------
@@ -51,6 +86,7 @@ def rebel_baskets(d, term, min_voters=MIN_PARTY_VOTERS):
     return [by_vote.get(i, frozenset()) for i in ids], ids, party_group
 
 
+# --- A-priori vs PCY --------------------------------------------------------------------
 # --- 1. A-priori vs PCY -----------------------------------------------------------------
 def compare_algorithms(baskets_by_name, supports, max_size=3, n_buckets=10_007):
     """Runs both algorithms on every basket set and support; checks they agree."""
@@ -88,9 +124,27 @@ def bucket_sweep(baskets, support, bucket_counts=(101, 1_009, 10_007, 100_003)):
     return pd.DataFrame(rows)
 
 
+# --- Interpreting itemsets: lift, rebel factions, coalitions ----------------------------
+# --- Validation helpers (ready) --------------------------------------------------------
+def to_table(frequent, n_baskets, min_size=2):
+    """Frequent itemsets as a sorted DataFrame with support and lift.
+    lift = support(S) / product of the supports of its items. lift > 1 means the items
+    vote FOR together more often than if each voted independently (the baseline)."""
+    single = {next(iter(s)): c for s, c in frequent.items() if len(s) == 1}
+    rows = []
+    for s, c in frequent.items():
+        if len(s) < min_size:
+            continue
+        expected = np.prod([single[i] / n_baskets for i in s])
+        rows.append(dict(itemset=" + ".join(sorted(s)), size=len(s), count=c,
+                         support=c / n_baskets, lift=(c / n_baskets) / expected))
+    cols = ["itemset", "size", "count", "support", "lift"]
+    return pd.DataFrame(rows, columns=cols).sort_values("support", ascending=False)
+
+
 def rebel_alliances(frequent, n_baskets, party_group):
     """Frequent rebel pairs with lift, labelled same/different group and country."""
-    t = fi.to_table(frequent, n_baskets, min_size=2)
+    t = to_table(frequent, n_baskets, min_size=2)
     t = t[t["size"] == 2].copy()
     parts = t.itemset.str.split(" + ", regex=False)
     a, b = parts.str[0], parts.str[1]
@@ -127,7 +181,7 @@ def group_coalitions(d, support=0.3, max_size=4):
     ID (term 9) and PfE (term 10) are both written FAR so the terms can be compared."""
     baskets, found = {}, set()
     for term in (9, 10):
-        b, _ = fi.build_baskets(d, term, level="group", passed_only=True)
+        b, _ = build_baskets(d, term, level="group", passed_only=True)
         baskets[term] = [frozenset("FAR" if g in ("ID", "PFE") else g for g in x) for x in b]
         f, _ = fi.apriori(baskets[term], support, max_size=max_size)
         found |= {s for s in f if len(s) >= 2}
@@ -146,12 +200,31 @@ def group_coalitions(d, support=0.3, max_size=4):
     return t.sort_values("change").reset_index(drop=True)
 
 
+# --- Check against HowTheyVote's answer key ---------------------------------------------
+def required_coalitions(d, term=10):
+    """Answer key: the minimal combinations of groups whose FOR votes a vote needed to
+    pass (HowTheyVote's groups_required_for_majority.csv, available from 2024 only, so
+    term 10 only). Returns how often each combination appears, per vote.
+
+    Suggested comparison: build group-level baskets on the same votes
+    (build_baskets(d, 10, level="group", passed_only=True, vote_ids=<these ids>)) and
+    check that the frequent group itemsets found by apriori/pcy contain the most common
+    required combinations, and with what support."""
+    req = d["required"]
+    v = d["votes"]
+    ids = set(v.vote_id[(v.term == term) & v.contested & v.passed])
+    req = req[req.vote_id.isin(ids)]
+    counts = req.group_codes.value_counts().rename_axis("required_groups").reset_index(name="votes")
+    counts["share_of_votes"] = counts.votes / req.vote_id.nunique()
+    return counts, np.array(sorted(req.vote_id.unique()))
+
+
 def validate_against_required(d):
     """Answer key check (term 10): for every adopted vote in groups_required_for_majority,
     is each required group combination inside our group basket (the groups whose
     majority voted FOR)? And how often is each combination present overall?"""
-    req, ids = fi.required_coalitions(d)
-    b, vids = fi.build_baskets(d, 10, level="group", passed_only=True, vote_ids=ids)
+    req, ids = required_coalitions(d)
+    b, vids = build_baskets(d, 10, level="group", passed_only=True, vote_ids=ids)
     basket_of = dict(zip(vids, b))
     key = d["required"][d["required"].vote_id.isin(ids)]
     inside = [set(c.split("+")) <= basket_of.get(v, frozenset())
@@ -161,71 +234,3 @@ def validate_against_required(d):
         np.mean([set(c.split("+")) <= x for x in b]) for c in req.required_groups]
     return dict(votes=len(ids), required_rows=len(key),
                 share_required_combos_inside_basket=float(np.mean(inside))), req
-
-
-# --- 3. The EPP as pivot ----------------------------------------------------------------
-def _group_majorities(d):
-    V, mv = d["votes"], d["member_votes"]
-    v = V[(V.term > 0) & V.contested]
-    x = mv[mv.vote_id.isin(v.vote_id) & mv.position.isin(POSITIONS)]
-    x = pd.DataFrame({"vote_id": x.vote_id.to_numpy(),
-                      "group": x.group_code.astype(str).replace({"ID": "FAR", "PFE": "FAR"}).to_numpy(),
-                      "pos": np.where(x.position.to_numpy() == "FOR", 1, -1)})
-    net = x.groupby(["vote_id", "group"]).pos.sum().unstack(fill_value=0)
-    n_for = x[x.pos == 1].groupby(["vote_id", "group"]).size().unstack(fill_value=0)
-    n_against = x[x.pos == -1].groupby(["vote_id", "group"]).size().unstack(fill_value=0)
-    meta = v.set_index("vote_id")[["term", "timestamp", "passed", "is_main", "procedure_type"]]
-    maj = np.sign(net)
-    maj["LEFT"] = np.sign(net[[g for g in LEFT_BLOC if g in net]].sum(axis=1))
-    maj["RIGHT"] = np.sign(net[[g for g in RIGHT_BLOC if g in net]].sum(axis=1))
-    return maj.join(meta), n_for, n_against, meta
-
-
-def epp_pivot(d):
-    """Votes where the left bloc and the right bloc majorities disagree: which side the
-    EPP majority takes, and how often the right side wins with / without the EPP.
-    Reported for all contested votes, final votes, legislation (COD), and per half-year."""
-    maj, _, _, _ = _group_majorities(d)
-    s = maj[(maj.LEFT != 0) & (maj.RIGHT != 0) & (maj.LEFT != maj.RIGHT) & (maj.EPP != 0)].copy()
-    s["epp_with_right"] = s.EPP == s.RIGHT
-    s["right_won"] = np.where(s.RIGHT == 1, s.passed, ~s.passed)
-    s["half"] = s.timestamp.dt.year.astype(str) + np.where(s.timestamp.dt.month <= 6, "-H1", "-H2")
-
-    def summarise(df):
-        return pd.Series(dict(
-            votes=len(df), epp_with_right=df.epp_with_right.mean(),
-            right_wins_when_epp_joins=df[df.epp_with_right].right_won.mean(),
-            right_wins_when_epp_against=df[~df.epp_with_right].right_won.mean()))
-    subsets = {"all contested votes": s, "final votes (is_main)": s[s.is_main],
-               "legislation (COD)": s[s.procedure_type == "COD"]}
-    by_term = pd.concat({k: v.groupby("term").apply(summarise, include_groups=False)
-                         for k, v in subsets.items()}, names=["subset"]).reset_index()
-    by_half = s.groupby("half").apply(summarise, include_groups=False).reset_index()
-    by_half["term"] = np.where(by_half.half >= "2024-H2", 10, 9)
-    return by_term, by_half
-
-
-def voting_power(d):
-    """Share of contested votes whose result (FOR vs AGAINST, simple majority) would flip
-    if one group's MEPs all switched sides. Simplification: abstentions and special
-    majorities are ignored."""
-    _, n_for, n_against, meta = _group_majorities(d)
-    tot_for, tot_against = n_for.sum(axis=1), n_against.sum(axis=1)
-    passed = tot_for > tot_against
-    rows = []
-    for g in n_for.columns:
-        if g == "NI":
-            continue
-        f2 = tot_for - n_for[g] + n_against[g]
-        a2 = tot_against - n_against[g] + n_for[g]
-        flipped = (f2 > a2) != passed
-        for term in (9, 10):
-            ids = meta.index[meta.term == term].intersection(flipped.index)
-            members = n_for.loc[ids, g] + n_against.loc[ids, g]
-            if members.mean() > 0:
-                rows.append(dict(group=g, term=term, pivotal_share=flipped[ids].mean(),
-                                 mean_voting_members=members.mean()))
-    t = pd.DataFrame(rows).pivot(index="group", columns="term",
-                                 values=["pivotal_share", "mean_voting_members"])
-    t.columns = [f"{name}_term{term}" for name, term in t.columns]
-    return t.reset_index()

@@ -1,74 +1,26 @@
-"""RQ2: which cross-border coalitions of national parties pass votes?
+"""A-priori and PCY, our own implementations (course topic: frequent itemsets).
 
-One basket per contested vote; the items are the national parties (or groups) whose
-majority voted FOR. A frequent itemset {A, B, C} = parties that very often vote FOR
-together.
-
-`apriori` and `pcy` are our own implementations (course algorithms). They are checked
-against a brute-force count in tests/test_frequent_items.py:
+Both take a list of baskets (sets of item names) and return
+(frequent, stats): frequent = {frozenset(itemset): count} for all frequent itemsets of
+size 1..max_size; stats = candidates counted, frequent itemsets and memory per pass.
+They are checked against brute_force in tests/test_frequent_items.py:
     python tests/test_frequent_items.py
-
-Why A-priori is needed here (useful for the report): a term-9 party basket has ~80
-items on average, so one basket alone contains ~3,200 pairs and ~82,000 triples;
-counting every triple of every basket directly is ~7 * 10^8 increments. A-priori only
-counts the itemsets whose subsets are all frequent. Run `basket_stats` for exact numbers.
 
 Implementation notes
 - Items are mapped to integer ids (sorted by name, so the ids and the PCY hash are the
   same on every machine).
 - Counting a pass = one pass over the baskets. Baskets are processed in chunks as 0/1
   matrices so numpy does the inner loop; the logic is the same as a basket-by-basket loop.
+- Building baskets from the votes, lift and the analyses live in
+  analysis/itemset_mining.py.
 """
 from itertools import combinations
 from collections import Counter
 import time
 import numpy as np
-import pandas as pd
-from config import POSITIONS, MIN_PARTY_VOTERS
 
 
-# --- Baskets (ready) -------------------------------------------------------------------
-def build_baskets(d, term, level="party", passed_only=False,
-                  min_voters=MIN_PARTY_VOTERS, vote_ids=None):
-    """Returns (baskets, vote_ids): baskets is a list of frozensets of item names.
-
-    level="party": items are national parties as "COUNTRY:label" (stable across terms)
-    level="group": items are European political groups (NI excluded, not a group)
-    passed_only:   keep only votes that were adopted ("coalitions that pass votes")
-    min_voters:    an item needs at least this many FOR/AGAINST voters on the vote
-    """
-    v = d["votes"]
-    v = v[(v.term == term) & v.contested]
-    if passed_only:
-        v = v[v.passed]
-    if vote_ids is not None:
-        v = v[v.vote_id.isin(vote_ids)]
-    mv = d["member_votes"]
-    mv = mv[mv.vote_id.isin(v.vote_id) & mv.position.isin(POSITIONS)]
-    col = "party" if level == "party" else "group_code"
-    x = pd.DataFrame({"vote_id": mv.vote_id.to_numpy(),
-                      "item": mv[col].astype("string").to_numpy(),
-                      "for_": (mv.position == "FOR").to_numpy()})
-    if level == "group":
-        x = x[x.item != "NI"]
-    else:
-        x = x[~x.item.str.endswith(":none")]          # MEPs without a national party
-    agg = x.groupby(["vote_id", "item"]).for_.agg(["sum", "size"]).reset_index()
-    agg = agg[(agg["size"] >= min_voters) & (agg["sum"] > agg["size"] / 2)]
-    by_vote = agg.groupby("vote_id").item.apply(frozenset)
-    ids = v.vote_id[v.vote_id.isin(by_vote.index)].to_numpy()
-    return [by_vote[i] for i in ids], ids
-
-
-def basket_stats(baskets):
-    sizes = np.array([len(b) for b in baskets])
-    items = set().union(*baskets)
-    return dict(baskets=len(baskets), distinct_items=len(items),
-                mean_basket_size=sizes.mean(),
-                pairs_if_counted_naively=int(sum(s * (s - 1) // 2 for s in sizes)),
-                triples_if_counted_naively=int(sum(s * (s - 1) * (s - 2) // 6 for s in sizes)))
-
-
+# --- Reference implementation (for TESTS on small data only) ---------------------------
 # --- Reference implementation (for TESTS on small data only) ---------------------------
 def brute_force(baskets, min_support, max_size=3):
     """Counts every itemset up to max_size in every basket. Correct but exponential:
@@ -87,6 +39,7 @@ def _threshold(min_support, n_baskets):
     return min_support * n_baskets if min_support < 1 else min_support
 
 
+# --- Shared building blocks ------------------------------------------------------------
 # --- Shared building blocks ------------------------------------------------------------
 def _encode(baskets):
     """Item names -> integer ids 0..n-1 (sorted by name), baskets -> arrays of ids."""
@@ -170,6 +123,7 @@ def _decode(result, items):
 
 
 # --- A-priori ---------------------------------------------------------------------------
+# --- A-priori ---------------------------------------------------------------------------
 def apriori(baskets, min_support, max_size=3):
     """A-priori.
 
@@ -217,6 +171,7 @@ def apriori(baskets, min_support, max_size=3):
     return _decode(result, items), stats
 
 
+# --- PCY --------------------------------------------------------------------------------
 # --- PCY --------------------------------------------------------------------------------
 def _hash_pairs(i, j, n_buckets):
     """Deterministic hash of item-id pairs (i < j) to a bucket. Large odd multipliers
@@ -285,38 +240,3 @@ def pcy(baskets, min_support, n_buckets=100_003, max_size=2):
 
     stats["time_s"] = time.perf_counter() - t0
     return _decode(result, items), stats
-
-
-# --- Validation helpers (ready) --------------------------------------------------------
-def to_table(frequent, n_baskets, min_size=2):
-    """Frequent itemsets as a sorted DataFrame with support and lift.
-    lift = support(S) / product of the supports of its items. lift > 1 means the items
-    vote FOR together more often than if each voted independently (the baseline)."""
-    single = {next(iter(s)): c for s, c in frequent.items() if len(s) == 1}
-    rows = []
-    for s, c in frequent.items():
-        if len(s) < min_size:
-            continue
-        expected = np.prod([single[i] / n_baskets for i in s])
-        rows.append(dict(itemset=" + ".join(sorted(s)), size=len(s), count=c,
-                         support=c / n_baskets, lift=(c / n_baskets) / expected))
-    cols = ["itemset", "size", "count", "support", "lift"]
-    return pd.DataFrame(rows, columns=cols).sort_values("support", ascending=False)
-
-
-def required_coalitions(d, term=10):
-    """Answer key: the minimal combinations of groups whose FOR votes a vote needed to
-    pass (HowTheyVote's groups_required_for_majority.csv, available from 2024 only, so
-    term 10 only). Returns how often each combination appears, per vote.
-
-    Suggested comparison: build group-level baskets on the same votes
-    (build_baskets(d, 10, level="group", passed_only=True, vote_ids=<these ids>)) and
-    check that the frequent group itemsets found by apriori/pcy contain the most common
-    required combinations, and with what support."""
-    req = d["required"]
-    v = d["votes"]
-    ids = set(v.vote_id[(v.term == term) & v.contested & v.passed])
-    req = req[req.vote_id.isin(ids)]
-    counts = req.group_codes.value_counts().rename_axis("required_groups").reset_index(name="votes")
-    counts["share_of_votes"] = counts.votes / req.vote_id.nunique()
-    return counts, np.array(sorted(req.vote_id.unique()))

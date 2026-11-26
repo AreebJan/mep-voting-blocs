@@ -1,4 +1,5 @@
-"""MEP x vote matrices, pairwise agreement and the kNN agreement graph.
+"""MEP x vote matrices, pairwise agreement, the kNN agreement graph, and the direct
+pair-agreement comparison (same group? same country?).
 
 Everything is computed with sparse matrix products, so a whole term (about 18,000 votes,
 6M FOR/AGAINST records) takes seconds instead of a dense pandas pivot.
@@ -91,3 +92,26 @@ def build_term_graph(d, term, k=K, vote_ids=None, min_votes=MIN_VOTES):
     W = knn_graph(agree, k=k)
     return dict(term=term, mv=mv, labels=lab, X=X, vote_ids=vids, agree=agree,
                 shared=shared, W=W)
+
+
+def pair_agreement(agree, lab):
+    """Mean agreement for pairs of MEPs by (same group?, same country?), with the
+    'different group, different country' pairs as the baseline."""
+    i, j = np.triu_indices(len(agree), 1)
+    a = agree[i, j]
+    ok = ~np.isnan(a)
+    g, c, p = lab.group.to_numpy(), lab.country.to_numpy(), lab.party.to_numpy()
+    sg, sc, sp_ = g[i] == g[j], c[i] == c[j], p[i] == p[j]
+    cats = {
+        "same group, same national party": sg & sp_,
+        "same group, same country, different party": sg & sc & ~sp_,
+        "same group, different country": sg & ~sc,
+        "different group, same country": ~sg & sc,
+        "different group, different country (baseline)": ~sg & ~sc,
+    }
+    rows = [dict(pair_type=k, mean_agreement=a[ok & m].mean(), sd=a[ok & m].std(),
+                 pairs=int((ok & m).sum())) for k, m in cats.items()]
+    df = pd.DataFrame(rows)
+    base = df.mean_agreement.iloc[-1]
+    df["minus_baseline"] = df.mean_agreement - base
+    return df
