@@ -35,6 +35,21 @@ Tests for the frequent-itemset code:
 python tests/test_frequent_items.py
 ```
 
+## Extra term: 2014-2019 (VoteWatch data)
+
+To check that the RQ1 result also holds before 2019, the 2014-2019 term (EP8) is loaded
+from the VoteWatch Europe dataset (EUI, https://cadmus.eui.eu/handle/1814/74918).
+Put `EP8_RCVs_2019_06_25.xlsx` and `EP8_Voted_docs.xlsx` in `data/raw/votewatch/`, then:
+
+```bash
+python src/load_votewatch.py   # builds data/processed/ep8_*.parquet (about 30 s)
+python src/ep8_analysis.py     # RQ1 + SVD map for EP8, compared with terms 9 and 10
+```
+
+Results go to `results/tables/ep8_*.csv`, `results/tables/three_terms_*.csv` and
+`results/figures/ep8_svd_map.png`. VoteWatch gives one group per MEP for the whole term,
+so group switchers are not handled for EP8 (RQ3 is not run on it).
+
 ## Layout
 
 | Path | What it does |
