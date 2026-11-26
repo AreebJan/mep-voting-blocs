@@ -1,17 +1,8 @@
 """RQ2: which coalitions pass votes, and did that change after the 2024 election?
 
-Three parts
-1. Frequent itemsets with our A-priori and PCY on two kinds of baskets:
-   - "FOR" baskets: per adopted contested vote, the national parties (or groups) whose
-     majority voted FOR. Dense (~55% of parties in every basket).
-   - "rebel" baskets: per contested vote, the national parties whose majority voted
-     AGAINST the rest of their own European group. Sparse (~6 parties per vote).
-   Comparing A-priori and PCY on both shows when PCY's hashing pays off.
-2. Group-level coalitions in term 9 vs term 10, validated against HowTheyVote's
-   groups_required_for_majority (term 10 only).
-3. The EPP as pivot: when the left and right blocs disagree, which side the EPP takes and
-   which side wins; and how many votes each group could flip on its own.
-"""
+Compares A-priori and PCY on FOR and rebel baskets, group coalitions across
+terms, and the EPP's role when the left and right blocs disagree."""
+
 import time
 import numpy as np
 import pandas as pd
@@ -206,9 +197,8 @@ def epp_pivot(d):
 
 
 def voting_power(d):
-    """Share of contested votes whose result (FOR vs AGAINST, simple majority) would flip
-    if one group's MEPs all switched sides. Simplification: abstentions and special
-    majorities are ignored."""
+    """Share of contested votes that would flip (FOR/AGAINST majority) if one group switched sides,
+    ignoring abstentions and special majorities."""
     _, n_for, n_against, meta = _group_majorities(d)
     tot_for, tot_against = n_for.sum(axis=1), n_against.sum(axis=1)
     passed = tot_for > tot_against

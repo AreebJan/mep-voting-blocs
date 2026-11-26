@@ -1,30 +1,27 @@
-"""Louvain community detection, implemented from scratch.
+"""Our own Louvain implementation.
 
-Written by Jazmin (Louvain_Attempt_Jazmin.ipynb). Moved here unchanged except for:
-- a resolution parameter `gamma` (gamma=1 is the original algorithm), needed for the
-  resolution sweep;
-- an optional `verbose` flag instead of always printing each level.
 
-Validated against networkx.community.louvain_communities in the main notebook.
+We checked it against networkx's louvain_communities in analysis.ipynb.
 
-How it works, in two phases that repeat:
-1. Local moving: start with every node alone. Visit nodes in random order and move each
-   one to the neighbouring community that gives the largest modularity gain, until no
-   node moves.
-2. Aggregation: merge each community into one "super-node" (H.T @ A @ H sums the edge
-   weights between communities; weights inside a community become a self-loop), then
-   run phase 1 again on the smaller graph.
-Stop when phase 1 no longer merges anything.
+The algorithm repeats two steps:
+1. Local moving: every node starts in its own community. We go through the nodes in a
+   random order and move each one to the neighbouring community where modularity goes
+   up the most. Keep going until nothing moves anymore.
+2. Aggregation: each community becomes one big node. H.T @ A @ H adds up the edge
+   weights between communities (edges inside a community end up on the diagonal).
+   Then we do step 1 again on this smaller graph.
+We stop when step 1 doesn't merge anything.
 """
 import numpy as np
 from collections import defaultdict
 
 
 def modularity(A, labels, gamma=1.0):
-    """Q = sum over communities c of [ in_c / 2m  -  gamma * (tot_c / 2m)^2 ]
+    """Modularity of a partition:
+    Q = sum over communities c of  in_c / 2m - gamma * (tot_c / 2m)^2
 
-    in_c  = total weight of edges inside c (each edge counted twice, as in A)
-    tot_c = total weighted degree of the nodes in c
+    in_c is the edge weight inside c (counted twice, since A is symmetric)
+    tot_c is the sum of the degrees of the nodes in c
     """
     labels = np.asarray(labels)
     degrees = A.sum(axis=1)
@@ -42,38 +39,38 @@ def modularity(A, labels, gamma=1.0):
 
 
 def local_moving(A, rng, gamma=1.0, max_passes=30, tol=1e-10):
-    """Phase 1. Returns a community label for every node of A."""
+    """Step 1. Gives back a community label for each node in A."""
     n = A.shape[0]
-    labels = np.arange(n, dtype=int)          # each node starts in its own community
+    labels = np.arange(n, dtype=int)
     degrees = A.sum(axis=1)
     two_m = degrees.sum()
     if two_m == 0:
         return labels
 
-    totals = {i: float(degrees[i]) for i in range(n)}   # total degree per community
-    counts = {i: 1 for i in range(n)}                    # members per community
+    totals = {i: float(degrees[i]) for i in range(n)}   # sum of degrees in each community
+    counts = {i: 1 for i in range(n)}                    # how many nodes in each community
     next_label = n
 
     for _ in range(max_passes):
         moves = 0
-        for node in rng.permutation(n):                  # random visiting order
+        for node in rng.permutation(n):
             ki = degrees[node]
             if ki == 0:
                 continue
             old = int(labels[node])
 
-            # Temporarily remove node from its community
+            # take the node out of its community for now
             totals[old] -= ki
             counts[old] -= 1
 
-            # Edge weight from node to each neighbouring community
+            # how much edge weight the node has to each neighbouring community
             links = defaultdict(float)
             for neighbor in np.flatnonzero(A[node]):
                 if neighbor != node:
                     links[int(labels[neighbor])] += float(A[node, neighbor])
 
-            # Gain of putting node into community c, up to a constant factor 1/m:
-            #   k_i,in(c) - gamma * k_i * tot_c / 2m
+            # modularity gain of moving the node into c (we drop the 1/m factor
+            # since it's the same for every c):  k_i,in(c) - gamma * k_i * tot_c / 2m
             def score(c):
                 return links[c] - gamma * ki * totals[c] / two_m
 
@@ -83,7 +80,8 @@ def local_moving(A, rng, gamma=1.0, max_passes=30, tol=1e-10):
                 if s > best_score + tol:
                     best, best_score = c, s
 
-            # An empty community scores 0. If every option is negative, start a new one.
+            # being alone gives a score of 0, so if all the options are negative
+            # the node gets a new community of its own
             if counts[old] > 0 and best_score < -tol:
                 best = next_label
                 next_label += 1
@@ -101,8 +99,8 @@ def local_moving(A, rng, gamma=1.0, max_passes=30, tol=1e-10):
 
 
 def louvain_from_scratch(W, seed=42, gamma=1.0, max_levels=20, verbose=False):
-    """Full Louvain. W: symmetric, non-negative weighted adjacency matrix (numpy).
-    Returns a community label (0, 1, 2, ...) for every node of W."""
+    """Runs Louvain on a symmetric, non-negative weight matrix W.
+    Gives back a community number for each node."""
     A = np.asarray(W, dtype=float).copy()
     assert A.ndim == 2 and A.shape[0] == A.shape[1]
     assert np.allclose(A, A.T)
@@ -110,12 +108,12 @@ def louvain_from_scratch(W, seed=42, gamma=1.0, max_levels=20, verbose=False):
     np.fill_diagonal(A, 0)
 
     original_A = A.copy()
-    original_labels = np.arange(len(A))        # community of each original node
+    original_labels = np.arange(len(A))        # which community each original node is in
     rng = np.random.default_rng(seed)
 
     for level in range(max_levels):
-        labels = local_moving(A, rng, gamma=gamma)              # phase 1
-        _, labels = np.unique(labels, return_inverse=True)      # renumber 0..k-1
+        labels = local_moving(A, rng, gamma=gamma)
+        _, labels = np.unique(labels, return_inverse=True)      # relabel as 0..k-1
         original_labels = labels[original_labels]
         n_communities = labels.max() + 1
         if verbose:
@@ -123,6 +121,6 @@ def louvain_from_scratch(W, seed=42, gamma=1.0, max_levels=20, verbose=False):
             print(f"Level {level + 1}: {n_communities} communities, modularity = {Q:.4f}")
         if n_communities == len(A):                             # nothing merged
             break
-        H = np.eye(n_communities)[labels]                       # node -> community one-hot
-        A = H.T @ A @ H                                         # phase 2: aggregate
+        H = np.eye(n_communities)[labels]
+        A = H.T @ A @ H                                         # step 2: merge communities
     return original_labels

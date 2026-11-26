@@ -1,17 +1,13 @@
-"""Outside technique: ideal-point scaling with the SVD of the MEP x vote matrix.
+"""Out of course topic: ideal-point scaling with the SVD of the MEP x vote matrix.
 
-Idea (as in NOMINATE-style scaling in political science): if MEPs have positions on a
-few hidden political dimensions, their FOR/AGAINST votes are roughly a low-rank matrix.
-The SVD finds the best rank-2 approximation, and each MEP's coordinates on the first two
-singular vectors place them on a 2D "political map".
+If MEPs have positions on a few hidden political dimensions, the vote matrix is roughly
+low-rank, so the first two singular vectors give each MEP a place on a 2D map.
 
-Steps
 1. X: +1 FOR, -1 AGAINST, 0 missing (contested votes of one term).
-2. Centre each vote on the mean of the MEPs who voted (so a vote everyone supports does
-   not dominate); missing entries stay 0 = "no information".
+2. Centre each vote on the mean of the MEPs who voted; missing entries stay 0.
 3. SVD: Xc = U S V^T. Coordinates = Xc V[:, :2].
-4. Missing-data correction: an MEP who attended half the votes would otherwise sit
-   halfway to the centre. We divide by the share of votes they attended.
+4. Divide by the share of votes each MEP attended, otherwise MEPs who missed many votes
+   get pulled towards the centre.
 """
 import numpy as np
 import pandas as pd
@@ -19,7 +15,7 @@ from sklearn.metrics import silhouette_score
 
 
 def ideal_points(X, n_dims=2):
-    """X: sparse MEP x vote matrix (+1/-1/0). Returns coordinates, explained share."""
+    """Returns the MEP coordinates and the share of variance per dimension."""
     Xd = X.toarray()
     O = Xd != 0
     col_mean = Xd.sum(0) / np.maximum(O.sum(0), 1)
@@ -31,7 +27,7 @@ def ideal_points(X, n_dims=2):
 
 
 def orient(coords, labels, left="GUE_NGL", up=None):
-    """Flip signs so that dimension 1 has the `left` group on the left (negative)."""
+    """Flips the signs so the `left` group is on the left of dimension 1."""
     c = coords.copy()
     if c[labels == left, 0].mean() > 0:
         c[:, 0] *= -1
@@ -41,14 +37,14 @@ def orient(coords, labels, left="GUE_NGL", up=None):
 
 
 def separation(coords, lab, n_perm=100, seed=0, exclude_ni=True):
-    """Silhouette of the 2D map by group / country / national party, with a shuffled-label
-    baseline. Silhouette: +1 = tight separate clusters, 0 = overlapping, <0 = mixed up."""
+    """Silhouette of the map by group, country and party, against shuffled labels.
+    +1 = clearly separate clusters, 0 = overlapping, below 0 = mixed up."""
     mask = (lab.group != "NI").to_numpy() if exclude_ni else np.ones(len(lab), bool)
     rng = np.random.default_rng(seed)
     rows = []
     for col in ["group", "country", "party"]:
         y = lab[col].to_numpy()[mask]
-        # silhouette needs >= 2 members per label; singleton parties are dropped
+        # silhouette needs at least 2 members per label
         vc = pd.Series(y).value_counts()
         keep = np.isin(y, vc[vc >= 2].index)
         x, y = coords[mask][keep], y[keep]
@@ -67,10 +63,9 @@ def group_centres(coords, lab):
 
 
 def arch_check(coords):
-    """Is dimension 2 just a curve of dimension 1 (the 'arch' or 'horseshoe' artefact
-    that SVD/PCA produce when the data really lie along ONE gradient)? Returns the R^2 of
-    dim 2 explained by a straight line and by a parabola in dim 1. A high quadratic R^2
-    means the bend in the map is mostly the artefact, not a real second dimension."""
+    """Checks if dimension 2 is just the horseshoe artefact of SVD: R^2 of dim 2 from a
+    line and from a parabola in dim 1. A high quadratic R^2 means the bend isn't a real
+    second dimension."""
     x, y = coords[:, 0], coords[:, 1]
     out = {}
     for degree, name in [(1, "R2_linear"), (2, "R2_quadratic")]:
@@ -81,9 +76,8 @@ def arch_check(coords):
 
 
 def extremes_co_opposition(d, term):
-    """Do the far left (The Left) and the far right (ID / PfE) vote together against the
-    centre? On votes where EPP, S&D and Renew majorities are on the same side, compare
-    how often BOTH extremes oppose them with what independence would predict."""
+    """On votes where EPP, S&D and Renew agree, how often do The Left and the far right
+    both vote against them, compared to if they were independent?"""
     from config import POSITIONS
     V, mv = d["votes"], d["member_votes"]
     v = V[(V.term == term) & V.contested]
@@ -106,9 +100,8 @@ def extremes_co_opposition(d, term):
 
 
 def dimensionality_over_time(d, n_votes=500, min_votes=200, reps=5, seed=0):
-    """Share of voting variance on the first SVD dimension per half-year. Every window
-    uses the same number of randomly drawn contested votes (n_votes, repeated reps
-    times), so windows with more votes are not favoured."""
+    """Share of variance on the first SVD dimension per half-year. Each window uses the
+    same number of random votes, so windows with more votes aren't favoured."""
     from config import POSITIONS
     from agreement import vote_matrix
     V, mv = d["votes"], d["member_votes"]
