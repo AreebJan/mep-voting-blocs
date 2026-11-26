@@ -1,0 +1,5 @@
+basket_set,baskets,distinct_items,mean_basket_size,pairs_if_counted_naively,triples_if_counted_naively
+"FOR, term 9",7602,143,80.38923967377006,25348259,719256605
+"rebels, term 9",14128,131,6.3974377123442805,450365,2129223
+"FOR, term 10",2284,139,76.48467600700525,6823391,180522980
+"rebels, term 10",5872,127,5.114271117166212,122544,479822
