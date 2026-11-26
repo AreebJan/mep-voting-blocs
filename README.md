@@ -48,11 +48,12 @@ python src/ep8_analysis.py     # RQ1 + SVD map for EP8, compared with terms 9 an
 ```
 
 Results go to `results/tables/ep8_*.csv`, `results/tables/three_terms_*.csv` and
-`results/figures/ep8_svd_map.png`. VoteWatch gives one group per MEP for the whole term
-(the one at the end of the term). `fetch_ep_groups.py` gets each MEP's real group history
-with dates from the EP Open Data API (https://data.europarl.europa.eu, CC BY 4.0) and writes
-`data/raw/votewatch/ep8_switches.csv`; `load_votewatch.py` then uses the group the MEP was in
-on the day of each vote. The loader also fixes the VoteWatch dates, which have day and month
+`results/figures/ep8_svd_map.png` and `results/figures/three_terms_rq1.png`. VoteWatch gives one group per MEP for the whole term
+(the one at the end of the term). `fetch_ep_groups.py` gets each MEP's real group and national party
+history with dates from the EP Open Data API (https://data.europarl.europa.eu, CC BY 4.0) and writes
+`data/raw/votewatch/ep8_switches.csv`; `load_votewatch.py` then uses the group and party the MEP
+had on the day of each vote (renamed parties, e.g. Front National -> Rassemblement National,
+count as one party). The loader also fixes the VoteWatch dates, which have day and month
 swapped whenever the day is 12 or less.
 
 ## Layout

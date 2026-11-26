@@ -4,7 +4,7 @@ Parliament's Open Data API, so group switchers in the VoteWatch data can be foun
 API: https://data.europarl.europa.eu/api/v2 (free, CC BY 4.0, max 500 requests per 5 min).
 The MEP ids in the VoteWatch file are the EP's own ids, so they match directly.
 
-Run once from the repo root (takes about 10-15 minutes, needs internet):
+Run once from the repo root (takes about 15-20 minutes the first time, needs internet):
     python src/fetch_ep_groups.py
 Every API answer is saved in data/raw/votewatch/ep_api/, so if it stops halfway, just run
 it again and it continues where it left off.
@@ -12,8 +12,9 @@ it again and it continues where it left off.
 Writes to data/raw/votewatch/:
     ep8_group_history.csv   one row per MEP per group membership in 2014-2019 (with dates)
     ep8_switches.csv        one row per group change during the term
-After this, run python src/load_votewatch.py again: it then uses the group the MEP was
-actually in on the day of each vote.
+    ep8_party_history.csv   national party memberships, renamed parties joined into one
+After this, run python src/load_votewatch.py again: it then uses the group and national
+party the MEP was actually in on the day of each vote.
 """
 import json
 import time
@@ -66,17 +67,18 @@ def get(path, name):
 
 
 def mep_ids():
-    """All MEP ids and names in the VoteWatch EP8 file (first columns only)."""
+    """All MEP ids, names and countries in the VoteWatch EP8 file (first columns only)."""
     wb = openpyxl.load_workbook(OUT / "EP8_RCVs_2019_06_25.xlsx", read_only=True)
-    rows = wb["Votes"].iter_rows(min_row=2, max_col=3, values_only=True)
-    return [(int(r[0]), f"{r[1]} {r[2]}") for r in rows if r[0] is not None]
+    rows = wb["Votes"].iter_rows(min_row=2, max_col=5, values_only=True)
+    return [(int(r[0]), f"{r[1]} {r[2]}", r[4]) for r in rows if r[0] is not None]
 
 
-def group_memberships(person):
-    """EU political group memberships that overlap the 2014-2019 term."""
+def group_memberships(person, kind="EU_POLITICAL_GROUP"):
+    """Memberships of one kind (EP group or national party) that overlap the 2014-2019
+    term."""
     out = []
     for m in person.get("hasMembership", []):
-        if not str(m.get("membershipClassification", "")).endswith("EU_POLITICAL_GROUP"):
+        if not str(m.get("membershipClassification", "")).endswith(kind):
             continue
         period = m.get("memberDuring") or {}
         start = period.get("startDate")
@@ -88,11 +90,31 @@ def group_memberships(person):
     return out
 
 
-def group_label(org_id, labels={}):
-    if org_id not in labels:
+def org_info(org_id, cache={}):
+    """(short label, English name) of an EP group or national party."""
+    if org_id not in cache:
         body = get(f"corporate-bodies/{org_id}", f"org_{org_id}")
-        labels[org_id] = body["data"][0].get("label", org_id) if body else org_id
-    return labels[org_id]
+        d = body["data"][0] if body and body.get("data") else {}
+        names = d.get("prefLabel") or {}
+        if isinstance(names, list):            # list of {"en": ...} objects
+            names = {k: v for x in names for k, v in x.items()}
+        label = d.get("label") or org_id
+        cache[org_id] = (label, names.get("en") or next(iter(names.values()), label))
+    return cache[org_id]
+
+
+def group_label(org_id):
+    return org_info(org_id)[0]
+
+
+INDEPENDENT_WORDS = ("independ", "indépend", "indipend", "unabhäng", "niezale", "bezpartyj",
+                     "nezávis", "nezávis", "neodvis", "sans étiquette", "non-party", "nepartin")
+
+
+def is_independent(label):
+    """Labels that mean "no party": these are not joined by name."""
+    s = str(label).strip().lower()
+    return s in ("", "-", "none") or any(w in s for w in INDEPENDENT_WORDS)
 
 
 def history_and_switches(rows):
@@ -112,17 +134,64 @@ def history_and_switches(rows):
         merged.append(cur)
     hist = pd.DataFrame(merged)
     nxt = hist.groupby("member_id")[["group_code", "start"]].shift(-1)
-    sw = hist[nxt.group_code.notna()].assign(to_group=nxt.group_code, date=nxt.start)
+    m = nxt.group_code.notna()
+    sw = hist[m].assign(to_group=nxt.group_code[m].to_numpy(), date=nxt.start[m].to_numpy())
     sw = sw.rename(columns={"group_code": "from_group"})[
         ["member_id", "name", "from_group", "to_group", "date"]]
     return hist, sw.reset_index(drop=True)
 
 
+def party_history(rows, min_moved=2, min_share=0.8):
+    """National party memberships, with ids that are the same party joined into one.
+
+    The EP can give one party several ids:
+    - re-registration: the same party name in the same country under another id
+      (joined by name; "Independent" and similar are not a party and never joined)
+    - renaming (e.g. Front National 4042 -> Rassemblement National 5057 on 12 June 2018):
+      joined if, on one day, at least min_share of the old id's members (and at least
+      min_moved MEPs) moved to the new id.
+    Single MEPs moving to another party are real party changes and stay separate."""
+    p = pd.DataFrame(rows).sort_values(["member_id", "start"])
+    p["start"], p["end"] = pd.to_datetime(p.start), pd.to_datetime(p.end)
+    nxt = p.groupby("member_id")[["org", "start"]].shift(-1)
+    moves = p.assign(to=nxt.org, day=nxt.start).dropna(subset=["to"])
+    moves = moves[moves.org != moves.to]
+    g = moves.groupby(["org", "to", "day"]).member_id.nunique().reset_index(name="moved")
+    g["active"] = [p[(p.org == o) & (p.start < d) & (p.end >= d - pd.Timedelta(days=1))]
+                   .member_id.nunique() for o, d in zip(g.org, g.day)]
+    renames = g[(g.moved >= min_moved) & (g.moved >= min_share * g.active)]
+
+    parent = {}                                  # union-find over party ids
+    def root(x):
+        while parent.get(x, x) != x:
+            x = parent[x]
+        return x
+    def join(a, b):
+        ra, rb = root(a), root(b)
+        if ra != rb:
+            parent[rb] = ra
+    for a, b in zip(renames.org, renames.to):
+        join(a, b)
+    same_name = 0
+    if "name" in p:
+        named = p[~p.name.map(is_independent)].drop_duplicates("org")
+        for _, ids in named.groupby(["country", named.name.str.strip().str.lower()]).org:
+            ids = list(ids)
+            same_name += len(ids) - 1
+            for b in ids[1:]:
+                join(ids[0], b)
+    p["party_id"] = p.org.map(root)
+    print(f"national parties: {p.org.nunique()} EP ids -> {p.party_id.nunique()} parties "
+          f"({len(renames)} renames, {same_name} ids with the same name joined)")
+    cols = ["member_id", "party_id", "org", "label", "name", "start", "end"]
+    return p[[c for c in cols if c in p]], renames
+
+
 def main():
     CACHE.mkdir(parents=True, exist_ok=True)
     meps = mep_ids()
-    rows, missing = [], []
-    for i, (mid, name) in enumerate(meps, 1):
+    rows, party_rows, missing = [], [], []
+    for i, (mid, name, country) in enumerate(meps, 1):
         data = get(f"meps/{mid}", f"mep_{mid}")
         if data is None or not data.get("data"):
             missing.append((mid, name))
@@ -132,12 +201,18 @@ def main():
             rows.append(dict(member_id=mid, name=name, label=label,
                              group_code=GROUP_CODES.get(label, label),
                              start=m["start"], end=m["end"]))
+        for m in group_memberships(data["data"][0], "NATIONAL_POLITICAL_GROUP"):
+            label, full = org_info(m["org"])
+            party_rows.append(dict(member_id=mid, country=country, org=m["org"], label=label,
+                                   name=full, start=m["start"], end=m["end"]))
         if i % 50 == 0:
             print(f"{i}/{len(meps)} MEPs done")
 
     hist, sw = history_and_switches(rows)
     hist.to_csv(OUT / "ep8_group_history.csv", index=False)
     sw.to_csv(OUT / "ep8_switches.csv", index=False)
+    parties, _ = party_history(party_rows)
+    parties.to_csv(OUT / "ep8_party_history.csv", index=False)
 
     unknown = sorted(set(hist.label) - set(GROUP_CODES))
     if unknown:

@@ -11,10 +11,12 @@ Then:   from load_votewatch import load_ep8; d8 = load_ep8()
 
 Differences from HowTheyVote to keep in mind:
 - each MEP has ONE group and ONE national party for the whole term (HowTheyVote has
-  them per vote): the group at the END of the term. Run src/fetch_ep_groups.py first to
-  get the real group history from the EP API; this script then uses the group the MEP
-  was in on the day of each vote
-- MEPs who left early have no group in the file; we fill it in from their national party
+  them per vote): the ones at the END of the term. Run src/fetch_ep_groups.py first to
+  get the real group and party history from the EP API; this script then uses the group
+  and national party the MEP had on the day of each vote
+- without that history, MEPs who left early have no group in the file; we fill it in
+  from their national party
+- the Date column has day and month swapped when the day is 12 or less (see fix_dates)
 - vote codes: 1 for, 2 against, 3 abstention, 4 absent, 5 didn't vote, 0 not an MEP.
   Code 6 is not in the legend; it is treated like 4/5 (did not vote). Only FOR and
   AGAINST are used by the analysis anyway.
@@ -108,32 +110,52 @@ def fix_dates(dates):
     return fixed
 
 
-def groups_on_vote_day(mv, votes, history):
-    """Replaces the one-group-per-MEP label by the group the MEP was in on the day of
-    each vote, from the EP API history (fetch_ep_groups.py). Keeps the VoteWatch group
-    where the history has no period covering that day."""
+def on_vote_day(mv, votes, history, col, what):
+    """For every MEP-vote, the value of `col` (group or party) from the EP API history
+    period that covers the day of the vote. Keeps the VoteWatch value where no period
+    covers that day."""
     day = mv.vote_id.map(votes.set_index("vote_id").timestamp)
     left = pd.DataFrame({"row": np.arange(len(mv)),
                          "member_id": mv.member_id.to_numpy().astype("int64"),
                          "day": day.to_numpy().astype("datetime64[ns]")}).sort_values("day")
     right = history.rename(columns={"start": "day"}).astype(
         {"member_id": "int64", "day": "datetime64[ns]", "end": "datetime64[ns]"}).sort_values("day")
-    hit = pd.merge_asof(left, right[["member_id", "day", "end", "group_code"]],
+    hit = pd.merge_asof(left, right[["member_id", "day", "end", col]],
                         on="day", by="member_id", direction="backward")
-    hit = hit[hit.group_code.notna() & (hit.day <= hit.end)].set_index("row").group_code
-    new = mv.group_code.astype("string").to_numpy()
+    hit = hit[hit[col].notna() & (hit.day <= hit.end)].set_index("row")[col]
+    new = mv[what].astype("string").to_numpy()
     changed = (new[hit.index] != hit.to_numpy()).sum()
     new[hit.index] = hit.to_numpy()
-    print(f"EP API history: group set for {len(hit) / len(mv):.1%} of MEP-votes, "
-          f"{changed:,} MEP-votes moved to the group the MEP was really in that day")
+    print(f"EP API {what} history: set for {len(hit) / len(mv):.1%} of MEP-votes, "
+          f"{changed:,} MEP-votes changed to the {what} the MEP really had that day")
     return pd.Categorical(new)
+
+
+def party_labels(parties, meps):
+    """Readable label per party id: "COUNTRY:name". The name is the EP's official name
+    of the party's most recent id (from fetch_ep_groups.py); for an older history file
+    without names, the name most often used for the party's MEPs in VoteWatch. If two
+    different parties end up with the same label, the EP id is added so they stay
+    separate."""
+    x = parties.merge(meps[["member_id", "Party", "country_code"]], on="member_id")
+    country = x.groupby("party_id").country_code.agg(lambda s: s.mode().iloc[0])
+    if "name" in x:
+        name = x.sort_values("start").groupby("party_id").name.last()
+    else:
+        name = x.groupby("party_id").Party.agg(lambda s: s.fillna("none").mode().iloc[0])
+    lab = (country + ":" + name.fillna("none").astype(str)).rename("label").to_frame()
+    dup = lab.label.duplicated(keep=False)
+    lab.loc[dup, "label"] = lab.label[dup] + " [" + lab.index[dup].astype(str) + "]"
+    return parties.assign(party=parties.party_id.map(lab.label))
 
 
 def build():
     meps, codes, vote_ids = read_rcvs()
     meps = clean_meps(meps)
-    history_file = SRC / "ep8_group_history.csv"
-    history = None
+    history_file, party_file = SRC / "ep8_group_history.csv", SRC / "ep8_party_history.csv"
+    history = parties = None
+    if party_file.exists():
+        parties = party_labels(pd.read_csv(party_file, parse_dates=["start", "end"]), meps)
     if history_file.exists():
         history = pd.read_csv(history_file, parse_dates=["start", "end"])
         # MEPs without a VoteWatch group can still be placed using the history
@@ -174,7 +196,9 @@ def build():
     })
 
     if history is not None:
-        mv["group_code"] = groups_on_vote_day(mv, votes, history)
+        mv["group_code"] = on_vote_day(mv, votes, history, "group_code", "group_code")
+    if parties is not None:
+        mv["party"] = on_vote_day(mv, votes, parties, "party", "party")
 
     # Sanity check: FOR counts rebuilt from the MEP data vs the official counts
     rebuilt = mv[mv.position == "FOR"].groupby("vote_id").size()
@@ -189,8 +213,12 @@ def build():
 
 
 def load_ep8():
-    """Same keys as cleaned_data.load() for the parts RQ1 and the SVD map need."""
-    if not (PROC / "ep8_votes.parquet").exists():
+    """Same keys as cleaned_data.load() for the parts RQ1 and the SVD map need. Rebuilds
+    the parquet files if they are missing or older than any input file."""
+    out = PROC / "ep8_member_votes.parquet"
+    inputs = [RCV_FILE, DOCS_FILE, SRC / "ep8_group_history.csv", SRC / "ep8_party_history.csv"]
+    newest = max(f.stat().st_mtime for f in inputs if f.exists())
+    if not out.exists() or out.stat().st_mtime < newest:
         build()
     return {"votes": pd.read_parquet(PROC / "ep8_votes.parquet"),
             "member_votes": pd.read_parquet(PROC / "ep8_member_votes.parquet")}

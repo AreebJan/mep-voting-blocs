@@ -3,7 +3,8 @@ settings as terms 9 and 10, and a comparison with their results.
 
 Run from the repo root after python src/load_votewatch.py:
     python src/ep8_analysis.py
-Writes results/tables/ep8_*.csv and results/figures/ep8_svd_map.png.
+Writes results/tables/ep8_*.csv, results/tables/three_terms_*.csv,
+results/figures/ep8_svd_map.png and results/figures/three_terms_rq1.png.
 Terms 9 and 10 are read from the tables analysis.ipynb already saved.
 """
 from pathlib import Path
@@ -78,8 +79,50 @@ def compare_terms(r):
     return main, pairs, sep, splits
 
 
+TERM_NAMES = {8: "2014-19", 9: "2020-24", 10: "2024-26"}
+PAIR_ORDER = [("same group, same national party", "Same group,\nsame party"),
+              ("same group, different country", "Same group,\ndifferent country"),
+              ("different group, same country", "Different group,\nsame country"),
+              ("different group, different country (baseline)", "Different group,\ndifferent country")]
+
+
+def three_term_figure(path=None):
+    """Left: how well Louvain's communities match group / party / country (AMI) in each
+    term. Right: mean agreement of MEP pairs by what they share, per term."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+    main = pd.read_csv(TABLES / "three_terms_main.csv", header=[0, 1], index_col=0)
+    pairs = pd.read_csv(TABLES / "three_terms_pair_agreement.csv", index_col=0)
+    terms = list(main.index)
+    x = np.arange(len(terms))
+    fig, (a, b) = plt.subplots(1, 2, figsize=(9.2, 3.3), gridspec_kw={"width_ratios": [1, 1.5]})
+    for col in ["group", "party", "country"]:
+        y = main[("AMI", col)].to_numpy()
+        a.plot(x, y, color=figures.LABEL_COLOURS[col], lw=2, marker="o", ms=5)
+        a.annotate(figures.LABEL_NAMES[col], (x[-1], y[-1]), xytext=(6, 0),
+                   textcoords="offset points", va="center", fontsize=8, color=figures.INK2,
+                   annotation_clip=False)
+    a.set_xticks(x, [TERM_NAMES.get(int(t), t) for t in terms])
+    a.set_ylim(0, 1); a.set_xlim(-0.3, len(terms) - 0.3)
+    a.set_ylabel("AMI with label (0 = chance)")
+    a.set_title("Which label do the voting communities follow?", loc="left")
+    width = 0.8 / len(terms)
+    shades = ["#b9d3f2", "#6fa6e6", "#257de0"][-len(terms):]
+    for i, t in enumerate(pairs.columns):
+        vals = [pairs.loc[k, t] for k, _ in PAIR_ORDER]
+        b.bar(np.arange(len(PAIR_ORDER)) + (i - (len(terms) - 1) / 2) * width, vals,
+              width=width * 0.95, color=shades[i], label=TERM_NAMES.get(int(t), t))
+    b.set_xticks(np.arange(len(PAIR_ORDER)), [lbl for _, lbl in PAIR_ORDER], fontsize=7.5)
+    b.set_ylim(0.4, 1); b.set_ylabel("Mean agreement of MEP pairs")
+    b.set_title("How often two MEPs vote the same way", loc="left")
+    b.legend(ncol=len(terms), fontsize=7.5, loc="upper right")
+    return figures._save(fig, path)
+
+
 if __name__ == "__main__":
     pd.set_option("display.width", 200)
     results = run()
     for t in compare_terms(results):
         print(t, "\n")
+    three_term_figure(FIGS / "three_terms_rq1.png")
+    print("saved results/figures/three_terms_rq1.png")
