@@ -240,3 +240,22 @@ def dimensionality(by_half, path=None):
     ax.set_ylabel("Variance on dimension 1")
     ax.set_title("How one-dimensional is voting?", loc="left")
     _save(fig, path)
+
+
+def winning_coalitions(mix, top=10, path=None):
+    """mix: group_mix from rq2.winning_party_coalitions. Which European groups the
+    frequent winning party coalitions (largest size) come from, term 9 vs term 10."""
+    m = mix.head(top).iloc[::-1]
+    names = {**GROUP_NAMES, "FAR": "ID/PfE"}
+    labels = [" + ".join(names.get(g, g) for g in s.split("+")) for s in m.groups]
+    y = np.arange(len(m))
+    fig, ax = plt.subplots(figsize=(6.2, 0.32 * len(m) + 1.2))
+    ax.barh(y + 0.2, m.share_term9, height=0.38, color="#b9d3f2", label="2019-24")
+    ax.barh(y - 0.2, m.share_term10, height=0.38, color="#257de0", label="2024-26")
+    ax.set_yticks(y, labels, fontsize=8)
+    ax.xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0, decimals=0))
+    ax.set_xlabel("Share of frequent winning party coalitions (3 parties)")
+    ax.set_title("Which groups the winning national-party coalitions come from", loc="left")
+    ax.grid(axis="y", visible=False)
+    ax.legend(loc="lower right", fontsize=8)
+    return _save(fig, path)

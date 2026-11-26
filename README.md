@@ -72,7 +72,7 @@ swapped whenever the day is 12 or less.
 | `src/rq1.py` | RQ1: validation, main comparison, pair agreement, national splits, resolution sweep, policy areas, robustness |
 | `src/svd_map.py` | Outside technique: SVD ideal-point map, horseshoe check, dimensionality over time |
 | `src/frequent_items.py` | Our A-priori and PCY, baskets, brute-force reference |
-| `src/rq2.py` | RQ2: A-priori vs PCY, rebel factions, group coalitions, EPP as pivot, voting power |
+| `src/rq2.py` | RQ2: A-priori vs PCY, winning national-party coalitions (cross-border / cross-group), rebel factions, group coalitions, EPP as pivot, voting power |
 | `src/rq3_switchers.py` | RQ3: did group switchers vote differently before switching? |
 | `src/figures.py` | Report figures |
 | `tests/test_frequent_items.py` | Checks A-priori / PCY against a brute-force reference |

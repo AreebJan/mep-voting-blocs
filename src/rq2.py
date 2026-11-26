@@ -110,7 +110,78 @@ def rebel_pair_summary(baskets, party_group, min_count=30):
     return summary, t
 
 
-# --- 2. Group-level coalitions ----------------------------------------------------------
+# --- 2. Which national-party coalitions win votes? -------------------------------------
+def _far(g):
+    """ID (term 9) and PfE (term 10) are both written FAR so the terms can be compared."""
+    return "FAR" if g in ("ID", "PFE") else g
+
+
+def party_groups(d, term):
+    """The European group each national party sat in for most of its votes in a term."""
+    _, x = _records(d, term)
+    x = x[~x.party.str.endswith(":none")]
+    return x.groupby("party").group.agg(lambda s: s.mode().iloc[0]).map(_far)
+
+
+def winning_party_coalitions(d, support=0.5, max_size=3):
+    """Our A-priori on the FOR baskets (one per adopted contested vote, items = national
+    parties whose majority voted FOR). A frequent itemset is a coalition of parties that
+    was on the winning side together on at least `support` of the adopted votes.
+
+    Every itemset gets its countries and European groups, so we can count how many
+    winning coalitions cross borders (parties from 2+ countries) and how many cross
+    group lines (parties from 2+ European groups). Returns (itemsets, summary, group_mix):
+    - itemsets:  one row per frequent coalition of 2..max_size parties
+    - summary:   per term and size, how many coalitions and the share crossing borders
+                 and groups
+    - group_mix: per term, which group combinations the largest coalitions come from"""
+    rows = []
+    for term in (9, 10):
+        baskets, _ = fi.build_baskets(d, term, level="party", passed_only=True)
+        frequent, _ = fi.apriori(baskets, support, max_size=max_size)
+        group = party_groups(d, term).to_dict()
+        n = len(baskets)
+        single = {next(iter(s)): c / n for s, c in frequent.items() if len(s) == 1}
+        for s, c in frequent.items():
+            if len(s) < 2:
+                continue
+            parties = sorted(s)
+            countries = {p.split(":")[0] for p in parties}
+            groups = {group.get(p, "NI") for p in parties}
+            rows.append(dict(
+                term=term, size=len(s), support=c / n,
+                lift=(c / n) / np.prod([single[p] for p in parties]),
+                coalition=" + ".join(f"{p} ({group.get(p, 'NI')})" for p in parties),
+                n_countries=len(countries), groups="+".join(sorted(groups)),
+                cross_border=len(countries) > 1, cross_group=len(groups) > 1))
+    itemsets = (pd.DataFrame(rows).sort_values(["term", "size", "support"],
+                                               ascending=[True, True, False])
+                .reset_index(drop=True))
+    summary = (itemsets.groupby(["term", "size"])
+               .agg(coalitions=("support", "size"), cross_border=("cross_border", "mean"),
+                    cross_group=("cross_group", "mean"))
+               .reset_index())
+    largest = itemsets[itemsets["size"] == max_size]
+    group_mix = (largest.groupby(["term", "groups"]).size().rename("coalitions").reset_index())
+    group_mix["share"] = group_mix.coalitions / group_mix.groupby("term").coalitions.transform("sum")
+    group_mix = (group_mix.pivot_table(index="groups", columns="term", values="share", fill_value=0)
+                 .rename(columns=lambda t: f"share_term{t}"))
+    group_mix["change"] = group_mix.share_term10 - group_mix.share_term9
+    group_mix = group_mix.sort_values("share_term10", ascending=False).reset_index()
+    return itemsets, summary, group_mix
+
+
+def top_coalitions(itemsets, size=2, top=5):
+    """Most frequent winning coalitions per term that cross borders, and those that
+    also cross group lines."""
+    t = itemsets[itemsets["size"] == size]
+    cols = ["term", "support", "lift", "coalition"]
+    border = t[t.cross_border].groupby("term").head(top)[cols]
+    group = t[t.cross_group].groupby("term").head(top)[cols]
+    return border, group
+
+
+# --- 3. Group-level coalitions ----------------------------------------------------------
 def group_coalitions(d, support=0.3, max_size=4):
     """Frequent group coalitions on adopted contested votes, found with A-priori in each
     term; then the support of every coalition found is computed in BOTH terms (so a
@@ -154,7 +225,7 @@ def validate_against_required(d):
                 share_required_combos_inside_basket=float(np.mean(inside))), req
 
 
-# --- 3. The EPP as pivot ----------------------------------------------------------------
+# --- 4. The EPP as pivot ----------------------------------------------------------------
 def _group_majorities(d):
     V, mv = d["votes"], d["member_votes"]
     v = V[(V.term > 0) & V.contested]
