@@ -15,7 +15,7 @@ import svd_map
 import figures
 from agreement import build_term_graph
 from evaluation import describe_communities
-from load_votewatch import load_ep8, TERM
+from load_votewatch import load_ep8, TERM, SRC
 
 OUT = Path(__file__).resolve().parent.parent / "results"
 TABLES, FIGS = OUT / "tables", OUT / "figures"
@@ -64,6 +64,16 @@ def compare_terms(r):
         old = pd.read_csv(TABLES / f"{old_name}.csv")
         return pd.concat([new, old], ignore_index=True)
 
+    # Without the EP party history (fetch_ep_groups.py), the 2014-19 national party is the
+    # VoteWatch end-of-term label, which splits renamed parties in two. Party results for
+    # 2014-19 are then left out of the comparison.
+    party_ok = (SRC / "ep8_party_history.csv").exists()
+    if not party_ok:
+        r = dict(r)
+        r["main"] = r["main"][r["main"].label != "party"]
+        r["pairs"] = r["pairs"][~r["pairs"].pair_type.str.contains("party")]
+        r["splits"] = r["splits"].iloc[0:0]
+        r["sep"] = r["sep"][r["sep"].label != "party"]
     main = both(r["main"], "rq1_main")
     main = main.pivot_table(index="term", columns="label", values=["AMI", "ARI"]).round(3)
     pairs = both(r["pairs"], "rq1_pair_agreement").pivot_table(
@@ -73,10 +83,41 @@ def compare_terms(r):
     splits = both(r["splits"], "rq1_splits_nationality")
     splits = splits[splits.group == "ALL (pooled)"].set_index("term")[
         ["together_same_party", "together_different_party"]].round(3)
+    summary = term_summary(r)
     for name, t in [("main", main), ("pair_agreement", pairs), ("svd_separation", sep),
-                    ("splits", splits)]:
+                    ("splits", splits), ("summary", summary)]:
         t.to_csv(TABLES / f"three_terms_{name}.csv")
-    return main, pairs, sep, splits
+    return main, pairs, sep, splits, summary
+
+
+def term_summary(r):
+    """One column per term with the numbers that show how the terms differ."""
+    def both(new, old_name):
+        return pd.concat([new, pd.read_csv(TABLES / f"{old_name}.csv")], ignore_index=True)
+    main = both(r["main"], "rq1_main")
+    pairs = both(r["pairs"], "rq1_pair_agreement")
+    sep = both(r["sep"], "svd_separation")
+    arch = both(pd.read_csv(TABLES / "ep8_svd_arch_check.csv"), "svd_arch_check")
+    rows = {}
+    for t in sorted(main.term.unique()):
+        m, p = main[main.term == t].set_index("label"), pairs[pairs.term == t].set_index("pair_type")
+        s, a = sep[sep.term == t].set_index("label"), arch[arch.term == t].iloc[0]
+        rows[TERM_NAMES.get(int(t), t)] = {
+            "communities found (Louvain)": int(m.n_communities.iloc[0]),
+            "modularity": m.Q_louvain.iloc[0],
+            "AMI with European group": m.AMI["group"],
+            "AMI with country": m.AMI["country"],
+            "agreement: same group, different country": p.mean_agreement["same group, different country"],
+            "agreement: different group, same country": p.mean_agreement["different group, same country"],
+            "agreement: baseline (different group and country)":
+                p.mean_agreement["different group, different country (baseline)"],
+            "SVD map: variance on dimension 1": s.explained_dim1.iloc[0],
+            "SVD map: variance on dimension 2": s.explained_dim2.iloc[0],
+            "SVD map: dimension 2 explained by a curve of dimension 1 (R2)": a.R2_quadratic,
+            "SVD map: silhouette by group": s.silhouette["group"],
+            "SVD map: silhouette by country": s.silhouette["country"],
+        }
+    return pd.DataFrame(rows).round(3)
 
 
 TERM_NAMES = {8: "2014-19", 9: "2020-24", 10: "2024-26"}
@@ -98,7 +139,8 @@ def three_term_figure(path=None):
     fig, (a, b) = plt.subplots(1, 2, figsize=(9.2, 3.3), gridspec_kw={"width_ratios": [1, 1.5]})
     for col in ["group", "party", "country"]:
         y = main[("AMI", col)].to_numpy()
-        a.plot(x, y, color=figures.LABEL_COLOURS[col], lw=2, marker="o", ms=5)
+        ok = ~np.isnan(y)
+        a.plot(x[ok], y[ok], color=figures.LABEL_COLOURS[col], lw=2, marker="o", ms=5)
         a.annotate(figures.LABEL_NAMES[col], (x[-1], y[-1]), xytext=(6, 0),
                    textcoords="offset points", va="center", fontsize=8, color=figures.INK2,
                    annotation_clip=False)
@@ -109,7 +151,7 @@ def three_term_figure(path=None):
     width = 0.8 / len(terms)
     shades = ["#b9d3f2", "#6fa6e6", "#257de0"][-len(terms):]
     for i, t in enumerate(pairs.columns):
-        vals = [pairs.loc[k, t] for k, _ in PAIR_ORDER]
+        vals = [pairs.loc[k, t] if k in pairs.index else np.nan for k, _ in PAIR_ORDER]
         b.bar(np.arange(len(PAIR_ORDER)) + (i - (len(terms) - 1) / 2) * width, vals,
               width=width * 0.95, color=shades[i], label=TERM_NAMES.get(int(t), t))
     b.set_xticks(np.arange(len(PAIR_ORDER)), [lbl for _, lbl in PAIR_ORDER], fontsize=7.5)

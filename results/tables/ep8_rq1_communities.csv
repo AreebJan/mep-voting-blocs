@@ -1,16 +1,16 @@
 community,size,main_group,main_group_share,groups,countries,parties,term
-8,177,EPP,0.98,"EPP 174, ECR 2, NI 1","DEU 36, POL 23, ITA 15","DEU:Christlich Demokratische Union Deutschlands 31, POL:Platforma Obywatelska 18, ITA:Forza Italia 11",8
-2,167,SD,0.98,"SD 163, EPP 3, NI 1","ITA 31, DEU 29, ROU 17","DEU:Sozialdemokratische Partei Deutschlands 29, ITA:Partito Democratico 27, ROU:Partidul Social Democrat 12",8
-7,82,ALDE,0.99,"ALDE 81, EPP 1, ECR 0","ESP 10, FRA 9, NLD 8","DEU:Freie Demokratische Partei 5, FIN:Suomen Keskusta 5, BEL:Open Vlaamse Liberalen en Democraten 4",8
-10,63,GUE_NGL,0.92,"GUE_NGL 58, NI 4, ECR 1","ESP 12, GRC 10, DEU 9","DEU:DIE LINKE. 8, ESP:PODEMOS 6, GRC:Coalition of the Radical Left 5",8
-11,62,GREEN_EFA,0.94,"GREEN_EFA 58, NI 2, SD 2","DEU 15, ESP 7, FRA 6","DEU:Bündnis 90/Die Grünen 12, FRA:Europe Écologie 6, SWE:Miljöpartiet de gröna 5",8
-3,56,ECR,0.91,"ECR 51, EPP 3, EFDD 1","GBR 26, DEU 6, BEL 4","GBR:Conservative Party 24, DEU:Liberal-Conservative Refomists 5, BEL:Nieuw-Vlaamse Alliantie 4",8
-13,43,ENF,0.67,"ENF 29, NI 10, EFDD 4","FRA 26, ITA 8, AUT 4","FRA:Rassemblement national 15, ITA:Lega Nord 8, FRA:Front national 5",8
-0,42,EFDD,0.62,"EFDD 26, ENF 10, NI 4","GBR 24, NLD 6, POL 5","GBR:United Kingdom Independence Party 19, NLD:Partij voor de Vrijheid 6, GBR:- 3",8
-9,24,SD,1.0,"SD 24, ALDE 0, ECR 0","GBR 24, AUT 0, BEL 0","GBR:Labour Party 24, AUT:Die Grünen - Die Grüne Alternative 0, AUT:Freiheitliche Partei Österreichs 0",8
-1,24,ECR,0.96,"ECR 23, NI 1, ALDE 0","POL 22, LTU 1, LVA 1","POL:Prawo i Sprawiedliwość 17, POL:Independent 2, LTU:Lietuvos lenkų rinkimų akcija – Krikščioniškų šeimų sąjunga 1",8
-12,21,EPP,1.0,"EPP 21, ALDE 0, ECR 0","FRA 21, AUT 0, BEL 0","FRA:Les Républicains 17, FRA:Indépendant 2, FRA:- 1",8
-5,19,EFDD,0.79,"EFDD 15, NI 2, ENF 1","ITA 17, HUN 1, LTU 1","ITA:Movimento 5 Stelle 15, HUN:- 1, ITA:Independent 1",8
-6,17,EPP,1.0,"EPP 17, ALDE 0, ECR 0","ESP 17, AUT 0, BEL 0","ESP:Partido Popular 16, ESP:- 1, AUT:Die Grünen - Die Grüne Alternative 0",8
-4,14,EPP,1.0,"EPP 14, ALDE 0, ECR 0","HUN 12, ROU 1, SVK 1","HUN:Fidesz-Magyar Polgári Szövetség-Kereszténydemokrata Néppárt 10, HUN:Fidesz-Magyar Polgári Szövetség-Keresztény Demokrata Néppárt 1, HUN:Kereszténydemokrata Néppárt 1",8
-14,14,SD,1.0,"SD 14, ALDE 0, ECR 0","ESP 14, AUT 0, BEL 0","ESP:Partido Socialista Obrero Español 13, ESP:Partit dels Socialistes de Catalunya 1, AUT:Die Grünen - Die Grüne Alternative 0",8
+7,180,EPP,0.99,"EPP 178, ECR 2, ALDE 0","DEU 36, POL 24, ITA 15","DEU:Christlich Demokratische Union Deutschlands 31, POL:Platforma Obywatelska 18, ITA:Forza Italia 11",8
+9,168,SD,0.99,"SD 166, EPP 2, ALDE 0","ITA 31, DEU 30, ROU 17","DEU:Sozialdemokratische Partei Deutschlands 29, ITA:Partito Democratico 27, ROU:Partidul Social Democrat 12",8
+8,82,ALDE,0.99,"ALDE 81, EPP 1, ECR 0","ESP 10, FRA 9, NLD 8","DEU:Freie Demokratische Partei 5, FIN:Suomen Keskusta 5, BEL:Open Vlaamse Liberalen en Democraten 4",8
+13,63,GUE_NGL,0.92,"GUE_NGL 58, NI 4, ECR 1","ESP 12, GRC 10, DEU 9","DEU:DIE LINKE. 8, ESP:PODEMOS 6, GRC:Coalition of the Radical Left 5",8
+1,62,GREEN_EFA,0.94,"GREEN_EFA 58, SD 2, ECR 1","DEU 15, ESP 7, FRA 6","DEU:Bündnis 90/Die Grünen 12, FRA:Europe Écologie 6, SWE:Miljöpartiet de gröna 5",8
+4,57,ECR,0.95,"ECR 54, NI 2, ENF 1","GBR 26, DEU 6, BEL 5","GBR:Conservative Party 24, DEU:Liberal-Conservative Refomists 5, BEL:Nieuw-Vlaamse Alliantie 4",8
+10,43,ENF,0.81,"ENF 35, NI 6, EFDD 2","FRA 26, ITA 8, AUT 4","FRA:Rassemblement national 15, ITA:Lega Nord 8, FRA:Front national 5",8
+0,42,EFDD,0.64,"EFDD 27, ENF 9, NI 5","GBR 24, NLD 6, POL 5","GBR:United Kingdom Independence Party 19, NLD:Partij voor de Vrijheid 6, GBR:- 3",8
+12,24,SD,1.0,"SD 24, ALDE 0, ECR 0","GBR 24, AUT 0, BEL 0","GBR:Labour Party 24, AUT:Die Grünen - Die Grüne Alternative 0, AUT:Freiheitliche Partei Österreichs 0",8
+3,24,ECR,1.0,"ECR 24, ALDE 0, EFDD 0","POL 22, LTU 1, LVA 1","POL:Prawo i Sprawiedliwość 17, POL:Independent 2, LTU:Lietuvos lenkų rinkimų akcija – Krikščioniškų šeimų sąjunga 1",8
+6,21,EPP,1.0,"EPP 21, ALDE 0, ECR 0","FRA 21, AUT 0, BEL 0","FRA:Les Républicains 17, FRA:Indépendant 2, FRA:- 1",8
+11,19,EFDD,0.84,"EFDD 16, ENF 1, GREEN_EFA 1","ITA 17, HUN 1, LTU 1","ITA:Movimento 5 Stelle 15, HUN:- 1, ITA:Independent 1",8
+2,17,EPP,1.0,"EPP 17, ALDE 0, ECR 0","ESP 17, AUT 0, BEL 0","ESP:Partido Popular 16, ESP:- 1, AUT:Die Grünen - Die Grüne Alternative 0",8
+5,14,SD,1.0,"SD 14, ALDE 0, ECR 0","ESP 14, AUT 0, BEL 0","ESP:Partido Socialista Obrero Español 13, ESP:Partit dels Socialistes de Catalunya 1, AUT:Die Grünen - Die Grüne Alternative 0",8
+14,14,EPP,1.0,"EPP 14, ALDE 0, ECR 0","HUN 12, ROU 1, SVK 1","HUN:Fidesz-Magyar Polgári Szövetség-Kereszténydemokrata Néppárt 10, HUN:Fidesz-Magyar Polgári Szövetség-Keresztény Demokrata Néppárt 1, HUN:Kereszténydemokrata Néppárt 1",8

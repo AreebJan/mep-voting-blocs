@@ -53,7 +53,11 @@ Results go to `results/tables/ep8_*.csv`, `results/tables/three_terms_*.csv` and
 history with dates from the EP Open Data API (https://data.europarl.europa.eu, CC BY 4.0) and writes
 `data/raw/votewatch/ep8_switches.csv`; `load_votewatch.py` then uses the group and party the MEP
 had on the day of each vote (renamed parties, e.g. Front National -> Rassemblement National,
-count as one party). The loader also fixes the VoteWatch dates, which have day and month
+count as one party).
+For RQ1 the comparison is 2014-19 vs 2019-24 and 2024-26 side by side
+(`results/tables/three_terms_summary.csv`). National-party results are shown for 2019-2026
+only: VoteWatch gives one end-of-term party label per MEP, so the 2014-19 party numbers are
+left out unless `ep8_party_history.csv` is present. The loader also fixes the VoteWatch dates, which have day and month
 swapped whenever the day is 12 or less.
 
 ## Layout

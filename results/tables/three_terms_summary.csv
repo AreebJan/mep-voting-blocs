@@ -1,0 +1,13 @@
+,2014-19,2020-24,2024-26
+communities found (Louvain),15.0,9.0,12.0
+modularity,0.834,0.811,0.845
+AMI with European group,0.807,0.857,0.833
+AMI with country,0.264,0.162,0.219
+"agreement: same group, different country",0.907,0.887,0.906
+"agreement: different group, same country",0.56,0.557,0.53
+agreement: baseline (different group and country),0.552,0.562,0.543
+SVD map: variance on dimension 1,0.261,0.337,0.435
+SVD map: variance on dimension 2,0.19,0.162,0.141
+SVD map: dimension 2 explained by a curve of dimension 1 (R2),0.001,0.682,0.401
+SVD map: silhouette by group,0.639,0.601,0.47
+SVD map: silhouette by country,-0.269,-0.303,-0.363
