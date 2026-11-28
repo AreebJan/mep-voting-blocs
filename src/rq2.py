@@ -10,7 +10,12 @@ from config import POSITIONS, MIN_PARTY_VOTERS
 import frequent_items as fi
 
 LEFT_BLOC = ["SD", "GREEN_EFA", "GUE_NGL"]
-RIGHT_BLOC = ["ECR", "FAR", "ESN"]           # FAR = ID (term 9) or PfE (term 10)
+# Every group to the EPP's right, per term. FAR = ID (term 9) or PfE (term 10). Each term
+# only has its own groups, so one list serves all terms:
+#   2004-09 UEN, IND/DEM, ITS | 2009-14 ECR, EFD | 2014-19 ECR, EFDD, ENF
+#   2019-24 ECR, ID | 2024- ECR, PfE, ESN
+# EFD/EFDD also held Italy's Five Star Movement and IND/DEM some left-wing eurosceptics.
+RIGHT_BLOC = ["ECR", "FAR", "ESN", "UEN", "IND_DEM", "ITS", "EFD", "EFDD", "ENF"]
 
 
 # --- Baskets ----------------------------------------------------------------------------
@@ -123,7 +128,7 @@ def party_groups(d, term):
     return x.groupby("party").group.agg(lambda s: s.mode().iloc[0]).map(_far)
 
 
-def winning_party_coalitions(d, support=0.5, max_size=3):
+def winning_party_coalitions(d, support=0.5, max_size=3, terms=(9, 10)):
     """Our A-priori on the FOR baskets (one per adopted contested vote, items = national
     parties whose majority voted FOR). A frequent itemset is a coalition of parties that
     was on the winning side together on at least `support` of the adopted votes.
@@ -136,7 +141,7 @@ def winning_party_coalitions(d, support=0.5, max_size=3):
                  and groups
     - group_mix: per term, which group combinations the largest coalitions come from"""
     rows = []
-    for term in (9, 10):
+    for term in terms:
         baskets, _ = fi.build_baskets(d, term, level="party", passed_only=True)
         frequent, _ = fi.apriori(baskets, support, max_size=max_size)
         group = party_groups(d, term).to_dict()
@@ -166,8 +171,10 @@ def winning_party_coalitions(d, support=0.5, max_size=3):
     group_mix["share"] = group_mix.coalitions / group_mix.groupby("term").coalitions.transform("sum")
     group_mix = (group_mix.pivot_table(index="groups", columns="term", values="share", fill_value=0)
                  .rename(columns=lambda t: f"share_term{t}"))
-    group_mix["change"] = group_mix.share_term10 - group_mix.share_term9
-    group_mix = group_mix.sort_values("share_term10", ascending=False).reset_index()
+    last = f"share_term{max(terms)}"
+    if {9, 10} <= set(terms):
+        group_mix["change"] = group_mix.share_term10 - group_mix.share_term9
+    group_mix = group_mix.sort_values(last, ascending=False).reset_index()
     return itemsets, summary, group_mix
 
 
@@ -182,13 +189,13 @@ def top_coalitions(itemsets, size=2, top=5):
 
 
 # --- 3. Group-level coalitions ----------------------------------------------------------
-def group_coalitions(d, support=0.3, max_size=4):
+def group_coalitions(d, support=0.3, max_size=4, terms=(9, 10)):
     """Frequent group coalitions on adopted contested votes, found with A-priori in each
     term; then the support of every coalition found is computed in BOTH terms (so a
     coalition below the threshold in one term shows its real support, not 0).
     ID (term 9) and PfE (term 10) are both written FAR so the terms can be compared."""
     baskets, found = {}, set()
-    for term in (9, 10):
+    for term in terms:
         b, _ = fi.build_baskets(d, term, level="group", passed_only=True)
         baskets[term] = [frozenset("FAR" if g in ("ID", "PFE") else g for g in x) for x in b]
         f, _ = fi.apriori(baskets[term], support, max_size=max_size)
@@ -201,11 +208,13 @@ def group_coalitions(d, support=0.3, max_size=4):
             sup = sum(s <= x for x in b) / n
             exp = np.prod([sum(i in x for x in b) / n for i in s])
             row[f"support_term{term}"] = sup
-            row[f"lift_term{term}"] = sup / exp
+            row[f"lift_term{term}"] = sup / exp if exp > 0 else np.nan   # group absent
         rows.append(row)
     t = pd.DataFrame(rows)
-    t["change"] = t.support_term10 - t.support_term9
-    return t.sort_values("change").reset_index(drop=True)
+    if {9, 10} <= set(terms):
+        t["change"] = t.support_term10 - t.support_term9
+        return t.sort_values("change").reset_index(drop=True)
+    return t.sort_values(f"support_term{max(terms)}", ascending=False).reset_index(drop=True)
 
 
 def validate_against_required(d):
@@ -263,11 +272,11 @@ def epp_pivot(d):
     by_term = pd.concat({k: v.groupby("term").apply(summarise, include_groups=False)
                          for k, v in subsets.items()}, names=["subset"]).reset_index()
     by_half = s.groupby("half").apply(summarise, include_groups=False).reset_index()
-    by_half["term"] = np.where(by_half.half >= "2024-H2", 10, 9)
+    by_half["term"] = by_half.half.map(s.groupby("half").term.agg(lambda x: x.mode().iloc[0]))
     return by_term, by_half
 
 
-def voting_power(d):
+def voting_power(d, terms=(9, 10)):
     """Share of contested votes that would flip (FOR/AGAINST majority) if one group switched sides,
     ignoring abstentions and special majorities."""
     _, n_for, n_against, meta = _group_majorities(d)
@@ -280,7 +289,7 @@ def voting_power(d):
         f2 = tot_for - n_for[g] + n_against[g]
         a2 = tot_against - n_against[g] + n_for[g]
         flipped = (f2 > a2) != passed
-        for term in (9, 10):
+        for term in terms:
             ids = meta.index[meta.term == term].intersection(flipped.index)
             members = n_for.loc[ids, g] + n_against.loc[ids, g]
             if members.mean() > 0:

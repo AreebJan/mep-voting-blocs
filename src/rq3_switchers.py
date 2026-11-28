@@ -56,7 +56,9 @@ def _auc(x, peers):
     return (np.mean(x > peers) + 0.5 * np.mean(x == peers)) if len(peers) else np.nan
 
 
-def run(d, min_votes=MIN_PRE_SWITCH_VOTES, n_boot=N_BOOTSTRAP, seed=0):
+def run(d, min_votes=MIN_PRE_SWITCH_VOTES, n_boot=N_BOOTSTRAP, seed=0, skip_clusters=()):
+    """skip_clusters: event clusters left out of the tests (e.g. a group dissolving, when
+    its members did not choose to leave); those MEPs still never count as peers."""
     ev = switch_events(d["group_memberships"])
     leavers_by_term = ev.groupby("term").apply(
         lambda e: set(zip(e.member_id, e.origin)), include_groups=False).to_dict()
@@ -65,6 +67,8 @@ def run(d, min_votes=MIN_PRE_SWITCH_VOTES, n_boot=N_BOOTSTRAP, seed=0):
         r, net = _term_records(d, term)
         left = leavers_by_term.get(term, set())
         for e in ev[ev.term == term].itertuples():
+            if e.cluster in skip_clusters:
+                continue
             w = r[(r.timestamp < e.date) & (r.group == e.origin)]
             if w.empty:
                 continue

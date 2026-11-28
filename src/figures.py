@@ -83,9 +83,10 @@ def resolution_sweep(sweeps, path=None):
 
 def policy_areas(tables, path=None):
     """tables: {term: DataFrame from rq1.policy_areas}; dot plot, AMI group vs country."""
-    fig, axes = plt.subplots(1, len(tables), figsize=(3.6 * len(tables), 2.8), sharey=True)
     tables = {k: v for k, v in tables.items()}
     all_labels = sorted(set().union(*[set(t.label) for t in tables.values()]))
+    height = max(2.8, 0.2 * len(all_labels) + 1)
+    fig, axes = plt.subplots(1, len(tables), figsize=(3.6 * len(tables), height), sharey=True)
     ypos = {lbl: i for i, lbl in enumerate(all_labels)}
     for ax, (term, t) in zip(np.atleast_1d(axes), tables.items()):
         t = t[~t.skipped.astype(bool)]
@@ -111,7 +112,8 @@ def policy_areas(tables, path=None):
 
 def splits(tables, path=None):
     """tables: {term: DataFrame from rq1.splits_follow_nationality}"""
-    order = [g for g in ["GUE_NGL", "GREEN_EFA", "SD", "RENEW", "EPP", "ECR", "ID", "PFE", "ESN"]
+    order = [g for g in ["GUE_NGL", "GREEN_EFA", "SD", "ALDE", "RENEW", "EPP", "UEN", "ECR",
+                         "IND_DEM", "EFD", "EFDD", "ITS", "ENF", "ID", "PFE", "ESN"]
              if any(g in set(t.group) for t in tables.values())]
     y_of = {g: i for i, g in enumerate(order[::-1])}
     fig, axes = plt.subplots(1, len(tables), figsize=(3.6 * len(tables), 2.8), sharey=True)

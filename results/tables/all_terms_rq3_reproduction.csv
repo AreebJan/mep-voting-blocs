@@ -1,0 +1,4 @@
+check,rows,identical
+same events (terms 9-10),140,True
+same per-event AUCs,140,True
+same pooled AUC and bootstrap CI,2,True

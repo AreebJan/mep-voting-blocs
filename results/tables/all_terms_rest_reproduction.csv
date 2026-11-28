@@ -1,0 +1,6 @@
+table,rows,matched,identical
+Louvain validation,2,2,True
+policy areas,14,14,True
+SVD group centres,17,17,True
+extremes,2,2,True
+"PCY bucket sweep (rebels, term 9)",4,4,True

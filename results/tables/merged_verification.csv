@@ -1,0 +1,45 @@
+check,value,threshold,ok,detail
+"duplicate (vote, MEP) rows",0,0,True,
+duplicate vote ids,0,0,True,
+MEP rows whose vote is missing,0,0,True,
+votes without any MEP rows,0,0,True,
+invalid positions,0,0,True,
+invalid country codes,0,0,True,
+unknown group codes,0,0,True,[]
+MEP-votes without a group,0.0,< 0.001,True,
+every term 6-10 has votes,"{6: 6199, 7: 6961, 8: 10252, 9: 19277, 10: 6505}",all > 1000,True,
+votes on a weekend,0,0,True,
+votes on a Friday (info),"{6: 54, 7: 47, 9: 513}","VoteWatch EP6/7 only, few",True,
+first/last vote inside each term,"{6: ('2004-09-15', '2009-05-07'), 7: ('2009-09-14', '2014-04-17'), 8: ('2014-07-16', '2019-04-18'), 9: ('2019-07-15', '2024-04-25'), 10: ('2024-07-17', '2026-11-12')}",all inside,True,
+VoteWatch dates going backwards in vote order,"{6: 0, 7: 1, 8: 1}",<= 2 per term,True,
+gaps > 60 days (info),18,summer and election breaks only,True,"2005-07-07->2005-09-06, 2006-07-06->2006-09-05, 2009-05-07->2009-09-14, 2010-07-08->2010-09-07, 2011-07-07->2011-09-13, 2012-07-05->2012-09-11, 2013-07-04->2013-09-10, 2014-04-17->2014-07-16, 2014-07-17->2014-09-16, 2015-07-09->2015-09-08, 2016-07-07->2016-09-12, 2017-07-06->2017-09-12, 2018-07-05->2018-09-10, 2019-04-18->2019-07-15, 2021-07-08->2021-09-13, 2022-07-07->2022-09-12, 2024-04-26->2024-07-17, 2026-07-09->2026-09-14"
+gaps > 75 days that do not span an election,0,0,True,[]
+VoteWatch ends before HowTheyVote starts,2019-04-18 < 2019-07-15,no overlap,True,
+votewatch FOR: official = rebuilt (exact / within 5),0.860 / 0.992,within 5 >= 0.95,True,"median |diff| 0, worst 476"
+votewatch AGAINST: official = rebuilt (exact / within 5),0.886 / 0.994,within 5 >= 0.95,True,"median |diff| 0, worst 316"
+votewatch ABSTENTION: official = rebuilt (exact / within 5),0.960 / 0.998,within 5 >= 0.95,True,"median |diff| 0, worst 65"
+howtheyvote FOR: official = rebuilt (exact / within 5),1.000 / 1.000,within 5 >= 0.95,True,"median |diff| 0, worst 0"
+howtheyvote AGAINST: official = rebuilt (exact / within 5),1.000 / 1.000,within 5 >= 0.95,True,"median |diff| 0, worst 0"
+howtheyvote ABSTENTION: official = rebuilt (exact / within 5),1.000 / 1.000,within 5 >= 0.95,True,"median |diff| 0, worst 0"
+VoteWatch MEPs found in the EP record,1.0,>= 0.999,True,0 MEPs missing
+"VoteWatch MEP-days with an EP seat, by term","{6: 0.9998, 7: 1.0, 8: 1.0}",>= 0.99 each,True,
+VoteWatch MEPs with an EP seat on < half their vote days,0,0,True,[]
+MEPs whose country != EP citizenship (info),20,<= 40 (cross-border MEPs),True,"[[28511, 'GBR', 'IRL'], [1913, 'DEU', 'FRA'], [28245, 'DEU', 'NLD'], [28339, 'CZE', 'DEU'], [4256, 'FRA', 'FIN'], [33988, 'ROU', 'HUN'], [39726, 'ROU', 'HUN'], [96954, 'GBR', 'ESP'], [1934, 'FRA', 'DEU'], [96674, 'SWE', 'ITA'], [97133, 'BEL', 'NLD'], [113959, 'GBR', 'IRL'], [125092, 'GRC', 'BGR'], [26146, 'ESP', 'FRA'], [197499, 'FRA', 'GRC']]"
+EP7 MEPs matched to an EP ID,853,>= 850 of 853,True,"{'k_full': 822, 'surname_variant': 11, 'k_last': 10, 'k_first': 8, 'manual': 2}"
+EP7 non-exact name matches with an EP seat on their vote days,1.0,>= 0.9 for every one,True,
+VoteWatch MEP-votes with group from the EP record,1.0,>= 0.99,True,"{'ep_api': 1.0, 'votewatch': 0.0, 'howtheyvote': 0.0}"
+"dated EP group = VoteWatch's static label, by term","{6: 0.9793, 7: 0.9844, 8: 0.973}",>= 0.95 each (switchers differ),True,
+MEP-votes in a group outside its lifetime,0,0,True,[]
+HowTheyVote group = EP record group on the same day,1.0,>= 0.99,True,100.0% of HowTheyVote MEP-votes covered by the record
+"MEP-votes with a party from EP ids, by source","{'howtheyvote': 1.0, 'votewatch': 0.9998}",>= 0.98,True,
+MEP-votes without any party label,0.0,< 0.001,True,
+HowTheyVote party label = EP label for the same party id,1.0,>= 0.95,True,522 party ids; differ: []
+re-elected MEPs: same party label across the 2019 seam,0.9407665505226481,>= 0.85,True,"287 MEPs; differ e.g. [['ITA:Conservatori e Riformisti', 'ITA:FdL'], ['FRA:PS', 'FRA:GRS'], ['POL:Bezpartyjny', 'POL:PiS'], [""FRA:L'union pour les Outremer"", 'FRA:LFI'], ['LTU:DP', 'LTU:Darbo partija'], ['PRT:PP', 'PRT:CDS-PP']]"
+re-elected MEPs: same group across the seam (ALDE->RENEW etc. allowed),0.9930313588850174,>= 0.9,True,
+EP9 VoteWatch votes matched 1:1 to a HowTheyVote vote,0.9851400549817966,>= 0.80,True,"13,259 of 13,459; HowTheyVote has 13,470 in the period (VoteWatch leaves out some votes)"
+matched votes: same result (passed),1.0,>= 0.98,True,
+MEP-vote rows present in both sources,0.9996720083965851,>= 0.97,True,"{'both': 0.9997, 'right_only': 0.0003, 'left_only': 0.0}"
+same position (all four codes),1.0,>= 0.97,True,
+same position where either says FOR/AGAINST,1.0,>= 0.99,True,"{'AGAINST': {'AGAINST': 3276316, 'FOR': 0}, 'FOR': {'AGAINST': 0, 'FOR': 5260026}}"
+dated EP group (built like 2004-19) = HowTheyVote group,1.0,>= 0.99,True,
+dated EP party id (built like 2004-19) = HowTheyVote party id,1.0,>= 0.98,True,100.0% of rows have both

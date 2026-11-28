@@ -60,6 +60,46 @@ only: VoteWatch gives one end-of-term party label per MEP, so the 2014-19 party 
 left out unless `ep8_party_history.csv` is present. The loader also fixes the VoteWatch dates, which have day and month
 swapped whenever the day is 12 or less.
 
+## Merged dataset 2004-2026 (VoteWatch + HowTheyVote + EP API)
+
+One table of every roll-call vote from Sept 2004 to now: VoteWatch EP6-EP8 (2004-2019)
+stacked with HowTheyVote (from July 2019), with each MEP's group and national party taken
+from the EP's dated membership records for the day of each vote. Put the VoteWatch export
+in `data/raw/VoteWatch-EP-voting-data_2004-2022/` (EP6-EP9 `*_RCVs_*.xlsx` and
+`*_Voted docs.xlsx`), run the HowTheyVote steps above, then:
+
+```bash
+python src/fetch_ep_history.py  # needs internet, ~20 min first time (cached in data/raw/ep_api/)
+python src/build_merged.py      # data/processed/merged_*.parquet (~3 min, ~6 GB RAM)
+python src/verify_merged.py     # 44 checks -> results/tables/merged_verification.csv
+```
+
+Load with `from build_merged import load_merged; d = load_merged()`. `member_id` is the
+EP's own ID in every term (EP7's file has none, so its MEPs are matched by name). VoteWatch
+EP9 (2019-2022) is not in the merged data; `verify_merged.py` uses it to check that the
+same build steps reproduce HowTheyVote's positions, groups and parties on 2019-2022.
+Notes: `term` follows the legislatures (term 9 starts July 2019, unlike `config.TERMS`);
+VoteWatch "absent" rows for periods outside an MEP's seat are dropped; a few VoteWatch date
+typos are repaired (printed during the build); `party` labels are the EP's short labels, so
+a renamed or re-registered party can change label between terms (`national_party_id` is
+the EP's id for one term).
+
+### The analysis on all five terms (2004-2026)
+
+After `build_merged.py`, these rerun the notebook's pipeline on terms 6-10 with the same
+settings and code. Each one checks that its terms 9-10 results equal the notebook's saved
+tables, and writes `results/tables/all_terms_*.csv` and `results/figures/all_terms_*.png`:
+
+```bash
+python src/all_terms_analysis.py   # RQ1 + SVD map
+python src/all_terms_rq2.py        # RQ2 (right bloc = every group to the EPP's right, per term)
+python src/all_terms_rq3.py        # RQ3 (group dissolutions left out; no stayers to compare)
+python src/all_terms_rest.py       # overview, Louvain vs networkx, policy areas, extremes, dimensionality
+```
+
+Before 2019, policy areas are VoteWatch's own (21 areas), not OEIL subjects, and the
+"extremes" check uses ALDE in the centre and the right bloc without ECR as the far right.
+
 ## Layout
 
 | Path | What it does |
